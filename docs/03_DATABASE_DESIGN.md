@@ -743,3 +743,31 @@ Columns: id PK, session_id, action_id nullable, object_id FK, evidence_type, cla
 All Version 2 authoritative tables remain in Third Normal Form. Companion observations reference source records instead of copying conversations. Prompt versions separate stable template identity from immutable content. Computer evidence references MinIO objects. Neo4j graph IDs are derived locators. Counters and current status fields are controlled denormalization with documented repair paths.
 
 Visual references: diagrams/DATABASE_RELATIONSHIPS.md and diagrams/MEMORY_COMPANION_PIPELINE.md.
+
+## 29. Orchestrator, Guardrails, and Hot-Path Data Support
+
+### 29.1 Orchestrator runtime records
+
+agent.runs, agent.run_steps, agent.decisions, agent.tool_actions, platform.jobs, platform.model_catalog, platform.model_policies, and platform.model_calls collectively support the Orchestrator.
+
+agent.decisions records fast/deep routing, retrieval plan, model tier, async decision, and reason. A fast no-agent response may use a lightweight decision/model-call record rather than creating artificial multi-step runs.
+
+### 29.2 Guardrails and policy records
+
+governance.permissions, governance.policy_versions, governance.policy_decisions, governance.approvals, governance.system_control_state, governance.data_egress_events, and audit.events support Guardrails and Policy Enforcement.
+
+Policy decisions must record enforcement stage: input, retrieval, model_input, model_output, action, memory_write, or egress.
+
+### 29.3 Fast-path hot reads
+
+Fast chat uses compact indexed reads and Redis projections backed by PostgreSQL. Heavy audit history, broad policy history, reflection, graph joins, and analytics stay off the hot path unless required.
+
+Required access paths include active policy version, system control state, recent conversation sequence, current summary, exact active memory lookup, model eligibility, and provider health. Cache keys carry policy/configuration version so stale security state fails closed or reloads.
+
+### 29.4 Free-model routing metadata
+
+platform.model_catalog and platform.model_policies support OpenRouter model key, free/paid tier, context limit, structured-output reliability, tool-output reliability, observed latency, availability, quality score, classification eligibility, fallback priority, health expiry, and last verification.
+
+platform.model_calls records selected tier, fallback chain, validation/repair attempts, registry version, route reason, and safe failure outcome.
+
+These additions remain normalized: observed health may use append-only model-health samples later, while model_catalog stores only the current routing projection.

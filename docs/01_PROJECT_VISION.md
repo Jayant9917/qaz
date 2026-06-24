@@ -527,3 +527,16 @@ This document is ready to serve as NOVO's product constitution when the owner ag
 ## 21. One-sentence definition
 
 > NOVO is an owner-controlled personal AI operating system that combines memory, knowledge, reasoning, tools, voice, and automation to help with real life while keeping every sensitive action visible, governed, explainable, and revocable.
+
+## 22. Initial Intelligence and Response Strategy
+
+NOVO Version 1 uses OpenRouter as its initial model gateway, prioritizing free and low-cost models while the product architecture is validated. OpenRouter is a transport gateway, not a trust boundary. NOVO remains responsible for privacy, authorization, memory access, validation, and tool safety.
+
+NOVO should feel fast without becoming careless. A dedicated Orchestrator classifies requests and chooses either a minimal fast path or a governed deep path.
+
+- Fast path: ordinary conversation, follow-ups, simple explanations, small code help, compact structured memory lookup, and no-tool responses.
+- Deep path: multi-step work, broad retrieval, tools, approvals, consolidation, reflection, long research, automation, and graph reasoning.
+
+Free-model variability is expected. NOVO compensates using smaller clean prompts, strict schemas, deterministic checks, bounded repair and fallback, provider-health metadata, and safe degradation.
+
+The product must avoid turning every prompt into an agent run. Retrieval and reasoning are used only when they add value.

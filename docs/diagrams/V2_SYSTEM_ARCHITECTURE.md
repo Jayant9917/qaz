@@ -131,3 +131,45 @@ graph LR
     NOVO -->|USES| PostgreSQL["PostgreSQL"]
     NOVO -->|HAS_GOAL| Privacy["Owner-controlled privacy"]
 ~~~
+
+## Orchestrated request flow
+
+```mermaid
+flowchart TB
+    Request["API / Chat Request"] --> Orchestrator["NOVO Orchestrator"]
+    Orchestrator --> Classify["Intent, Risk, Complexity, Latency, Privacy"]
+    Classify --> Choice{"Fast or Deep?"}
+
+    Choice -->|Fast| Fast["Fast Path"]
+    Fast --> Recent["Recent Context / Cached Summary"]
+    Recent --> Structured["Optional Structured Lookup"]
+    Structured --> InputG["Input Guardrails"]
+    InputG --> Tier1["Tier 1 Free/Fast Model"]
+    Tier1 --> OutputG["Output Guardrails"]
+    OutputG --> Reply["Streamed Reply"]
+
+    Choice -->|Deep| Deep["Deep Path"]
+    Deep --> Retrieval["Targeted Memory / RAG / Graph"]
+    Retrieval --> Plan["Tracked Agent Run and Steps"]
+    Plan --> Tier2["Tier 2 Reasoning Model"]
+    Tier2 --> OutputG2["Output Guardrails"]
+    OutputG2 --> Action{"Action Needed?"}
+    Action -->|No| Result["Final Result"]
+    Action -->|Yes| ActionG["Action Guardrails"]
+    ActionG --> Approval["Policy and Approval"]
+    Approval --> Tool["Tool Gateway"]
+
+    Deep -. long work .-> Jobs["Jobs / Outbox / RabbitMQ"]
+    Jobs --> Workers["Background Workers"]
+
+    Registry["Model Registry"] --> Tier1
+    Registry --> Tier2
+    Prompts["Prompt Registry"] --> Tier1
+    Prompts --> Tier2
+    Control["Kill Switch / Control State"] -. enforces .-> Orchestrator
+    Audit["Audit and Decision Trace"] -. records .-> Orchestrator
+```
+
+Fast Path still runs required Guardrails. Deep Path adds planning, broad retrieval, durable progress, tools, approvals, and asynchronous execution only when justified.
+
+Central specification: ../architecture/NOVO_ORCHESTRATOR_AND_GUARDRAILS.md.

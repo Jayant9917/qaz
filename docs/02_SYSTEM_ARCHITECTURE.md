@@ -344,3 +344,86 @@ The Computer Use Agent plans and observes; the Computer Control Layer validates 
 - diagrams/MEMORY_COMPANION_PIPELINE.md
 - diagrams/EVENTS_AND_REGISTRIES.md
 - diagrams/COMPUTER_CONTROL_FLOW.md
+
+## 17. NOVO Orchestrator, Guardrails, and Fast Response
+
+### 17.1 NOVO Orchestrator
+
+The Orchestrator is the request-routing subsystem above agents, memory, RAG, tools, and models. It classifies intent, risk, complexity, latency target, privacy constraints, and required capabilities.
+
+Responsibilities:
+
+- Select fast path or deep path
+- Select synchronous response or asynchronous job
+- Choose recent conversation, structured memory, semantic memory, episodic memory, RAG, or graph context
+- Decide whether tools or an agent run are necessary
+- Select model tier through the Model Router and Registry
+- Enforce context and cost budgets
+- Create run, step, decision, and correlation traces when required
+- Route long work through jobs, outbox, RabbitMQ, and workers
+
+The Orchestrator never authorizes its own decisions. Every protected path is enforced by Guardrails and Governance.
+
+### 17.2 NOVO Guardrails Engine
+
+Guardrails are policy enforcement points around input, retrieval, model calls, output, memory mutation, tools, and egress.
+
+- Input: secret detection, injection detection, classification filtering, provider eligibility, minimization
+- Output: schema validation, unsafe-output handling, action-sensitive claim validation, typed tool arguments
+- Action: capability, integration, approval, classification, mode, idempotency, and destination checks
+- Memory: provenance, contradiction, secret rejection, inference review, and retrieval reauthorization
+- Egress: destination eligibility, redaction, minimization, and data-egress audit
+
+No model output directly mutates state or executes a tool.
+
+### 17.3 Fast path
+
+Use for chat, follow-ups, simple explanations, small code help, compact lookups, lightweight summaries, and low-risk no-tool work.
+
+Fast-path order: current context -> cached summary -> indexed structured lookup -> optional minimal semantic retrieval -> Tier 1 model -> output validation.
+
+It skips reflection, broad RAG, graph traversal, full planning, and background consistency work unless the request requires them.
+
+### 17.4 Deep path
+
+Use for multi-step tasks, tool-heavy work, approvals, consolidation, reflection, research, large documents, automation, and graph reasoning.
+
+Deep path creates structured runs and steps, performs targeted broader retrieval, uses Tier 2 reasoning when justified, and moves expensive work to asynchronous workers.
+
+### 17.5 Execution routing matrix
+
+| Request | Path | Retrieval | Model tier | Tools |
+|---|---|---|---|---|
+| Simple chat/follow-up | Fast | Recent conversation | Tier 1 | None |
+| Coding explanation | Fast, escalate if needed | Conversation and optional docs | Tier 1 then Tier 2 | Optional |
+| Exact memory question | Fast | Structured memory first | Tier 1 | None |
+| Document question | Fast or Deep | Targeted chunks, semantic if needed | Tier 1 or Tier 2 | Optional |
+| Multi-step task | Deep | Targeted multi-source | Tier 2 | Yes |
+| Approval-bound action | Deep | Minimum targeted | Tier 2 | Yes |
+| Ingestion/embedding/reflection | Async Deep | Job-specific | Background | Workers |
+| Graph reasoning | Deep | Graph plus canonical reload | Tier 2 | Optional |
+
+### 17.6 Initial model strategy
+
+OpenRouter is the initial gateway for free and low-cost experimentation. The internal interface remains provider-neutral for future local, OpenAI, Anthropic, Gemini, or other providers.
+
+- Tier 1: fast default model for chat, reformulation, simple code, classification, summaries, and low-risk extraction drafts.
+- Tier 2: stronger reasoning for debugging, contradictions, synthesis, tool planning, and safety-sensitive reasoning.
+- Tier 3: future local/private model for Secret or Restricted local-only work, offline mode, and private fallback.
+
+Free models may have unstable latency, availability, long-context quality, hallucination rates, and tool JSON. Compensations are strict schemas, smaller prompts, deterministic flows, repair validation, health-aware fallback, and refusal when safe output cannot be obtained.
+
+### 17.7 Latency-first rules
+
+1. Do not run full memory, RAG, and graph retrieval for every request.
+2. Do not create a full agent plan for ordinary chat.
+3. Never run reflection during an interactive response.
+4. Avoid tools when current authorized context can answer safely.
+5. Prefer IDs and cached summaries over duplicated payloads.
+6. Run ingestion, embedding, reflection, export, rebuild, and long automation asynchronously.
+7. Measure user response latency separately from background consistency.
+8. Keep hot-path policy evaluation compact using versioned, safely cached policy snapshots.
+9. Prefer deterministic retrieval and validation before LLM reasoning.
+10. Never trust free-model tool output without validation.
+
+Central design: architecture/NOVO_ORCHESTRATOR_AND_GUARDRAILS.md.
