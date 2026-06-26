@@ -1,4 +1,4 @@
-"""Alembic migration environment."""
+﻿"""Alembic migration environment."""
 
 import asyncio
 from logging.config import fileConfig
@@ -8,14 +8,17 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from novo.audit import models as audit_models  # noqa: F401
 from novo.core.config import get_settings
+from novo.governance import models as governance_models  # noqa: F401
+from novo.identity import models as identity_models  # noqa: F401
 from novo.infrastructure.base import Base
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().postgres_dsn)
+config.set_main_option("sqlalchemy.url", get_settings().postgres_dsn.replace("%", "%%"))
 target_metadata = Base.metadata
 
 

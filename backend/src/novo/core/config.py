@@ -1,4 +1,4 @@
-﻿"""Typed application configuration."""
+"""Typed application configuration."""
 
 from functools import lru_cache
 from typing import Literal
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     require_infrastructure_for_readiness: bool = False
 
     postgres_host: str = "localhost"
-    postgres_port: int = Field(default=5432, ge=1, le=65535)
+    postgres_port: int = Field(default=5433, ge=1, le=65535)
     postgres_db: str = "novo"
     postgres_user: str = "novo"
     postgres_password: str = "change-me-development-only"

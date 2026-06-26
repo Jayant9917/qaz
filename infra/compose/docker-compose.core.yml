@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${NOVO_POSTGRES_USER:-novo}
       POSTGRES_PASSWORD: ${NOVO_POSTGRES_PASSWORD:-change-me-development-only}
     ports:
-      - "${NOVO_POSTGRES_PORT:-5432}:5432"
+      - "${NOVO_POSTGRES_PORT:-5433}:5432"
     volumes:
       - novo_postgres_data:/var/lib/postgresql/data
     healthcheck:

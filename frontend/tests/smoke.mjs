@@ -1,11 +1,12 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const page = await readFile(new URL("../src/app/page.tsx", import.meta.url), "utf8");
 const layout = await readFile(new URL("../src/app/layout.tsx", import.meta.url), "utf8");
 
 assert.match(page, /NOVO Control Center/);
-assert.match(page, /Phase E0 foundation active/);
+assert.match(page, /E2 frontend control center/);
+assert.match(page, /Visible product layer/);
 assert.match(layout, /metadata/);
 
 console.log("NOVO frontend smoke check passed");
