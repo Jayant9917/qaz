@@ -7,7 +7,10 @@
     "node": ">=20 <21"
   },
   "scripts": {
-    "dev": "pnpm --filter @novo/frontend dev",
+    "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target all",
+    "dev:backend": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target backend",
+    "dev:frontend": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target frontend",
+    "dev:infra": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target infra",
     "build": "pnpm --filter @novo/frontend build",
     "lint": "pnpm --filter @novo/frontend lint",
     "typecheck": "pnpm --filter @novo/frontend typecheck",
