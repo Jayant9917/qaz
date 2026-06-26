@@ -1,4 +1,4 @@
-"""Typed application configuration."""
+﻿"""Typed application configuration."""
 
 from functools import lru_cache
 from typing import Literal
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = Field(default=6379, ge=1, le=65535)
     redis_db: int = Field(default=0, ge=0)
+
+    bootstrap_owner_email: str = "owner@novo.local"
+    bootstrap_owner_display_name: str = "Jay Rana"
+    bootstrap_owner_password: str = "change-me-development-only"
+    session_ttl_hours: int = Field(default=168, ge=1, le=24 * 30)
+    audit_page_size_default: int = Field(default=100, ge=1, le=500)
 
     @property
     def postgres_dsn(self) -> str:
