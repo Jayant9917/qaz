@@ -1,0 +1,35 @@
+name: novo-core
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${NOVO_POSTGRES_DB:-novo}
+      POSTGRES_USER: ${NOVO_POSTGRES_USER:-novo}
+      POSTGRES_PASSWORD: ${NOVO_POSTGRES_PASSWORD:-change-me-development-only}
+    ports:
+      - "${NOVO_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - novo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOVO_POSTGRES_USER:-novo} -d ${NOVO_POSTGRES_DB:-novo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${NOVO_REDIS_PORT:-6379}:6379"
+    volumes:
+      - novo_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  novo_postgres_data:
+  novo_redis_data:

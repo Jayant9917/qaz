@@ -1,0 +1,17 @@
+{
+  "name": "novo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @novo/frontend dev",
+    "build": "pnpm --filter @novo/frontend build",
+    "lint": "pnpm --filter @novo/frontend lint",
+    "typecheck": "pnpm --filter @novo/frontend typecheck",
+    "test": "pnpm --filter @novo/frontend test",
+    "quality": "pnpm lint && pnpm typecheck && pnpm test"
+  }
+}
