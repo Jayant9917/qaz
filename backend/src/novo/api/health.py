@@ -1,8 +1,8 @@
-"""Health and readiness endpoints."""
+﻿"""Health and readiness endpoints."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel
 
 from novo.core.config import Settings, get_settings
@@ -24,12 +24,15 @@ class ReadyResponse(BaseModel):
 
 
 @router.get("/live", response_model=LiveResponse)
-async def live(settings: Settings = get_settings()) -> LiveResponse:
+async def live(settings: Annotated[Settings, Depends(get_settings)]) -> LiveResponse:
     return LiveResponse(status="alive", service=settings.app_name, version=__version__)
 
 
 @router.get("/ready", response_model=ReadyResponse)
-async def ready(response: Response, settings: Settings = get_settings()) -> ReadyResponse:
+async def ready(
+    response: Response,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ReadyResponse:
     dependencies = await check_dependencies(settings)
     required_states = [item for item in dependencies.values() if item.required]
     is_ready = all(item.status == "available" for item in required_states)

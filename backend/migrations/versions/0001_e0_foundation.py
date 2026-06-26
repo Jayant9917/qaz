@@ -1,11 +1,11 @@
-"""Create NOVO schemas and migration metadata.
+﻿"""Create NOVO schemas and migration metadata.
 
 Revision ID: 0001_e0
 Revises:
 Create Date: 2026-06-24
 """
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op

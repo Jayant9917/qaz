@@ -1,4 +1,4 @@
-name: NOVO CI
+﻿name: NOVO CI
 
 on:
   pull_request:
@@ -48,7 +48,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 11.7.0
+          version: 10.34.4
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -57,7 +57,7 @@ jobs:
           cache: pnpm
 
       - name: Install frontend dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Lint frontend
         run: pnpm --filter @novo/frontend lint

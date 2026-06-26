@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "@novo/frontend",
   "version": "0.1.0",
   "private": true,
@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"No frontend tests yet in E0\""
+    "test": "node tests/smoke.mjs"
   },
   "dependencies": {
     "next": "^15.3.0",
@@ -17,11 +17,14 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@next/eslint-plugin-next": "^15.5.19",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.3.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "typescript": "^5.8.0"
   }
 }

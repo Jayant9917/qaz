@@ -1,4 +1,4 @@
-# NOVO
+﻿# NOVO
 
 NOVO is an owner-controlled Personal AI Operating System.
 
@@ -17,8 +17,8 @@ This repository is currently in Phase E0: Engineering Foundation.
 ## Prerequisites
 
 - Python 3.12
-- Node.js 20 or newer
-- pnpm 11
+- Node.js 20.x
+- pnpm 10.34.4
 - Docker with Compose for PostgreSQL and Redis
 
 Docker is not currently installed on this workstation. The application can still run unit tests after dependencies are installed, but infrastructure readiness checks require the core Compose profile.

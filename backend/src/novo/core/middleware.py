@@ -1,8 +1,8 @@
-"""HTTP middleware."""
+﻿"""HTTP middleware."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from time import perf_counter
-from typing import Awaitable, Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware

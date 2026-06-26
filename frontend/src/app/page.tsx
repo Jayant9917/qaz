@@ -1,4 +1,4 @@
-const modules = [
+﻿const modules = [
   {
     title: "Governance First",
     body: "Permissions, approvals, audit logs, and security modes are treated as core product surfaces, not hidden backend details.",
