@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     bootstrap_owner_display_name: str = "Jay Rana"
     bootstrap_owner_password: str = "novo-owner-1234"
     session_ttl_hours: int = Field(default=168, ge=1, le=24 * 30)
+
+    openrouter_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_timeout_seconds: float = Field(default=45.0, ge=1.0, le=300.0)
     audit_page_size_default: int = Field(default=100, ge=1, le=500)
 
     login_rate_limit: int = Field(default=5, ge=1, le=1000)

@@ -1,4 +1,4 @@
-import { AuditPanel } from "./audit-panel";
+﻿import { AuditPanel } from "./audit-panel";
 import { BackendHealthCard } from "./backend-health-card";
 import { ControlStatePanel } from "./control-state-panel";
 import { OverviewPanels } from "./overview-panels";
@@ -7,6 +7,7 @@ import { SessionPanel } from "./session-panel";
 
 const navItems = [
   { label: "Overview", href: "#overview" },
+  { label: "Chat", href: "/chat" },
   { label: "Identity", href: "#identity" },
   { label: "Sessions", href: "#sessions" },
   { label: "Permissions", href: "/permissions" },
@@ -177,3 +178,8 @@ export function ControlCenterShell() {
     </main>
   );
 }
+
+
+
+
+

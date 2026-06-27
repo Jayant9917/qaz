@@ -1,4 +1,4 @@
-"""Alembic migration environment."""
+﻿"""Alembic migration environment."""
 
 import asyncio
 from logging.config import fileConfig
@@ -9,10 +9,13 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from novo.audit import models as audit_models  # noqa: F401
+from novo.conversations import models as conversation_models  # noqa: F401
 from novo.core.config import get_settings
 from novo.governance import models as governance_models  # noqa: F401
 from novo.identity import models as identity_models  # noqa: F401
 from novo.infrastructure.base import Base
+from novo.models import calls as calls_models  # noqa: F401
+from novo.models import registry as registry_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
@@ -55,3 +58,5 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     asyncio.run(run_async_migrations())
+
+

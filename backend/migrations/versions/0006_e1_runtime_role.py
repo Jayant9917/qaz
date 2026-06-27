@@ -10,7 +10,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-SCHEMAS = ("identity", "governance", "audit")
+SCHEMAS = ("identity", "governance", "audit", "chat")
 TABLES = {
     "identity": ("roles", "sessions", "users", "user_roles"),
     "governance": ("control_events", "permissions", "role_permissions", "system_control_state"),
@@ -57,3 +57,4 @@ def downgrade() -> None:
 
     op.execute("REVOKE novo_runtime FROM novo")
     op.execute("DROP ROLE IF EXISTS novo_runtime")
+
