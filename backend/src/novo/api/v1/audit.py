@@ -1,4 +1,4 @@
-﻿"""Audit log routes."""
+"""Audit log routes."""
 
 from __future__ import annotations
 

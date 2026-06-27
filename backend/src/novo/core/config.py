@@ -37,11 +37,16 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, ge=1, le=65535)
     redis_db: int = Field(default=0, ge=0)
 
-    bootstrap_owner_email: str = "owner@novo.local"
+    bootstrap_owner_email: str = "owner@novo.example"
     bootstrap_owner_display_name: str = "Jay Rana"
-    bootstrap_owner_password: str = "change-me-development-only"
+    bootstrap_owner_password: str = "novo-owner-1234"
     session_ttl_hours: int = Field(default=168, ge=1, le=24 * 30)
     audit_page_size_default: int = Field(default=100, ge=1, le=500)
+
+    login_rate_limit: int = Field(default=5, ge=1, le=1000)
+    login_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86400)
+    mutation_rate_limit: int = Field(default=30, ge=1, le=1000)
+    mutation_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86400)
 
     @property
     def postgres_dsn(self) -> str:

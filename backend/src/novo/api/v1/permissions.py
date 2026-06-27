@@ -1,4 +1,4 @@
-﻿"""Permission catalog routes."""
+"""Permission catalog routes."""
 
 from __future__ import annotations
 

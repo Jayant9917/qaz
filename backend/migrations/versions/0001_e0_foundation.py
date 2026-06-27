@@ -1,4 +1,4 @@
-﻿"""Create NOVO schemas and migration metadata.
+"""Create NOVO schemas and migration metadata.
 
 Revision ID: 0001_e0
 Revises:

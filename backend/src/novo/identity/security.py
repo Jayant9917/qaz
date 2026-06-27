@@ -1,4 +1,4 @@
-﻿"""Identity security helpers."""
+"""Identity security helpers."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ PASSWORD_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 390_000
 SALT_BYTES = 16
 SESSION_TOKEN_BYTES = 48
+CSRF_TOKEN_BYTES = 32
 
 
 def normalize_email(email: str) -> str:
@@ -57,4 +58,12 @@ def generate_session_token() -> str:
 
 
 def hash_session_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def generate_csrf_token() -> str:
+    return secrets.token_urlsafe(CSRF_TOKEN_BYTES)
+
+
+def hash_csrf_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()

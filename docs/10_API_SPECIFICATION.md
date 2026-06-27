@@ -34,6 +34,8 @@ This document defines NOVO's external HTTP, SSE, and WebSocket contracts. APIs e
 ## 4. Authentication
 
 Browser uses Secure, HttpOnly, SameSite session cookie.
+Browser clients keep the session cookie in the browser and send the CSRF token from a non-HttpOnly companion cookie as X-CSRF-Token.
+Bearer headers remain available for compatibility and non-browser service clients, but they are not the primary browser transport.
 
 State-changing cookie requests require CSRF token.
 

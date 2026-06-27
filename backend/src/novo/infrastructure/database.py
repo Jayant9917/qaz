@@ -1,7 +1,8 @@
-﻿"""PostgreSQL engine and lifecycle."""
+"""PostgreSQL engine and lifecycle."""
 
 from collections.abc import AsyncIterator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -10,9 +11,15 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from novo.core.config import get_settings
+from novo.infrastructure.rls import apply_runtime_role
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+async def _configure_session(session: AsyncSession) -> None:
+    await session.execute(text("SET row_security = on"))
+    await apply_runtime_role(session)
 
 
 def get_engine() -> AsyncEngine:
@@ -37,6 +44,7 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with get_session_factory()() as session:
+        await _configure_session(session)
         yield session
 
 

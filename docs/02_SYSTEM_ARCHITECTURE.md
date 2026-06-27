@@ -83,7 +83,7 @@ Provides chat, Control Center, memory, documents, approvals, audit, agent runs, 
 - SSE for tokens, run events, and job progress.
 - WebSocket only for bidirectional voice/computer control.
 - MinIO upload only via short-lived object/method-specific presigned URL.
-- `HttpOnly`, `Secure`, `SameSite` session cookie; CSRF protection on mutations.
+- `HttpOnly`, `Secure`, `SameSite` session cookie; CSRF protection on mutations. Browser sessions should not rely on localStorage for bearer persistence.
 - Restrictive CSP; all model/document/tool content rendered as untrusted.
 - UI hiding is never authorization; no credentials enter client bundles.
 

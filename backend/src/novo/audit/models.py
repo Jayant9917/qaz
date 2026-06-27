@@ -1,4 +1,4 @@
-﻿"""Audit log models."""
+"""Audit log models."""
 
 from __future__ import annotations
 

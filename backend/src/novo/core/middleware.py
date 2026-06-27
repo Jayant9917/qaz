@@ -1,4 +1,4 @@
-﻿"""HTTP middleware."""
+"""HTTP middleware."""
 
 import logging
 from collections.abc import Awaitable, Callable

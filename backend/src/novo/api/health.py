@@ -1,4 +1,4 @@
-﻿"""Health and readiness endpoints."""
+"""Health and readiness endpoints."""
 
 from typing import Annotated, Literal
 

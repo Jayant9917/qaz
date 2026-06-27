@@ -197,6 +197,7 @@ Requirements:
 
 - Session tokens are random, high entropy, and stored only as hashes server-side.
 - Browser session IDs use HttpOnly, Secure, SameSite cookies.
+- Browsers keep the session cookie and submit CSRF from a companion non-HttpOnly cookie or equivalent protected source.
 - State-changing cookie requests use CSRF protection.
 - Sessions have absolute and inactivity expiry.
 - Rotation occurs after authentication and privilege change.

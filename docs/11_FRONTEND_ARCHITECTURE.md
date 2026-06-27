@@ -130,7 +130,7 @@ Always retrieved from API. Browser state is not authoritative.
 - Lockout and rate-limit feedback
 - No sensitive token display
 
-Session cookie remains HttpOnly.
+Session cookie remains HttpOnly. The browser reads only the companion CSRF cookie and never stores bearer tokens in localStorage.
 
 ## 9. Chat experience
 
@@ -486,6 +486,7 @@ Differentiate:
 ## 31. Security
 
 - No bearer token in localStorage
+- HttpOnly session cookie plus CSRF cookie transport
 - CSRF protection
 - Strict CSP
 - Safe Markdown rendering

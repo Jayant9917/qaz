@@ -1,8 +1,8 @@
-﻿# NOVO
+# NOVO
 
 NOVO is an owner-controlled Personal AI Operating System.
 
-This repository is currently in Phase E0: Engineering Foundation.
+This repository is currently in Phase E1: Identity and Control Foundation (in progress).
 
 ## Repository areas
 
@@ -20,8 +20,9 @@ This repository is currently in Phase E0: Engineering Foundation.
 - Node.js 20.x
 - pnpm 10.34.4
 - Docker with Compose for PostgreSQL and Redis
+- WSL Ubuntu for frontend development and builds on Windows
 
-Docker is not currently installed on this workstation. The application can still run unit tests after dependencies are installed, but infrastructure readiness checks require the core Compose profile.
+Docker Desktop is installed and the core Compose services are available locally. The application can still run unit tests after dependencies are installed, but infrastructure readiness checks require the core Compose profile.
 
 ## Quick start
 
@@ -31,6 +32,10 @@ Docker is not currently installed on this workstation. The application can still
 4. Start PostgreSQL and Redis with the core Compose profile.
 5. Run backend and frontend development servers.
 6. Run the quality scripts.
+
+Frontend development now runs through WSL Ubuntu on this Windows machine so Next.js can avoid the local spawn/permission issue we found in the native Windows environment.
+
+Browser sessions use HttpOnly cookies with CSRF protection; bearer headers remain a compatibility path for non-browser clients only.
 
 See backend/README.md, frontend/README.md, and infra/README.md.
 

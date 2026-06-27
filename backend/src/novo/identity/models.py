@@ -1,4 +1,4 @@
-﻿"""Identity models."""
+"""Identity models."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,8 +39,13 @@ class User(Base):
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    locale: Mapped[str] = mapped_column(String(16), nullable=False, default="en")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    security_mode: Mapped[str] = mapped_column(String(24), nullable=False, default="assistant")
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -52,6 +57,8 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     roles: Mapped[list[Any]] = relationship(
         "Role",
@@ -108,6 +115,9 @@ class Session(Base):
         index=True,
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    csrf_token_hash: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
