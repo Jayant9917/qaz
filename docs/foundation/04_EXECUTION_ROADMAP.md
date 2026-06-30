@@ -2,7 +2,7 @@
 
 **Status:** Draft for implementation
 **Owner:** Jay Rana
-**Updated:** 2026-06-24
+**Updated:** 2026-06-30
 
 ## 1. Purpose
 
@@ -22,6 +22,8 @@ The Product Roadmap describes user value over time. This Execution Roadmap descr
 8. Keep derived stores rebuildable.
 9. Use OpenRouter free models behind provider-neutral interfaces.
 10. Do not introduce Neo4j, computer control, or autonomy before their dependencies are proven.
+11. The desktop assistant is the primary daily-use client; the web frontend is the Control Center.
+12. Desktop voice/GUI must call governed backend APIs instead of bypassing backend permissions, audit, or tool controls.
 
 ## 3. Architecture decision gate
 
@@ -70,6 +72,10 @@ Recommended codebase:
 - frontend/features
 - frontend/lib
 - frontend/tests
+- desktop/app
+- desktop/voice
+- desktop/ui
+- desktop/tests
 - prompts/system
 - prompts/agents
 - prompts/tools
@@ -154,7 +160,31 @@ Exit gate:
 - Response latency and failure metrics exist.
 - Message ordering and idempotency tests pass.
 
-## 8. Phase E3: Explicit Memory
+## 8. Phase E2.5: Desktop Assistant Shell and Voice Prototype
+
+Deliver:
+
+- Local desktop app shell
+- Text input connected to existing backend chat APIs
+- Assistant status states: idle, listening, thinking, speaking, blocked, degraded
+- Live transcript and response display
+- Basic animation/presence surface
+- Push-to-talk or microphone button placeholder
+- Speech-to-text adapter boundary
+- Text-to-speech adapter boundary
+- Non-blocking GUI threading model for audio and backend calls
+- Session/bootstrap flow compatible with the backend
+- Safety rule: desktop cannot directly access documents, email, tools, memory, credentials, or model providers
+
+Exit gate:
+
+- Desktop app can send a message to NOVO backend and display the streamed answer.
+- GUI remains responsive while waiting for backend responses.
+- Audio and backend work do not block the main UI thread.
+- Desktop app shows degraded/backend-unavailable state clearly.
+- Existing web Control Center remains available for audit, permissions, settings, and kill switch.
+
+## 9. Phase E3: Explicit Memory
 
 Deliver:
 
@@ -175,7 +205,7 @@ Exit gate:
 - Deletion blocks and reconciles.
 - Memory export and audit work.
 
-## 9. Phase E4: Secure Documents and RAG
+## 10. Phase E4: Secure Documents and RAG
 
 Deliver:
 
@@ -198,7 +228,7 @@ Exit gate:
 - Projection rebuild and deletion pass.
 - RAG evaluation baseline exists.
 
-## 10. Phase E5: Deep Orchestration
+## 11. Phase E5: Deep Orchestration
 
 Deliver:
 
@@ -219,7 +249,7 @@ Exit gate:
 - Decisions explain retrieval/model/tool choices.
 - Kill switch stops active runs.
 
-## 11. Phase E6: Governed Tools
+## 12. Phase E6: Governed Tools
 
 Deliver:
 
@@ -250,7 +280,7 @@ Exit gate:
 - Credentials never enter prompts/logs.
 - Tool removal and revocation are tested.
 
-## 12. Phase E7: Consolidation and Companion foundation
+## 13. Phase E7: Consolidation and Companion foundation
 
 Deliver:
 
@@ -272,7 +302,7 @@ Exit gate:
 - Candidate retries are idempotent.
 - Dependency/manipulation abuse tests pass.
 
-## 13. Phase E8: Reflection and Automation
+## 14. Phase E8: Reflection and Automation
 
 Deliver:
 
@@ -293,7 +323,7 @@ Exit gate:
 - Notifications do not leak sensitive content.
 - No sensitive work auto-resumes after kill switch.
 
-## 14. Phase E9: Knowledge Graph
+## 15. Phase E9: Knowledge Graph
 
 Deliver:
 
@@ -313,7 +343,7 @@ Exit gate:
 - Sensitive relationship policy passes.
 - Graph retrieval demonstrates measurable value.
 
-## 15. Phase E10: Computer Control
+## 16. Phase E10: Computer Control
 
 Deliver:
 
@@ -334,13 +364,14 @@ Exit gate:
 - Critical actions require exact approval.
 - Host secrets are inaccessible.
 
-## 16. Cross-cutting work in every phase
+## 17. Cross-cutting work in every phase
 
 Every phase includes:
 
 - Database migration
 - API contract
 - Frontend visibility
+- Desktop visibility when the feature affects daily interaction
 - Security threat update
 - Audit events
 - Observability
@@ -351,7 +382,7 @@ Every phase includes:
 - Documentation update
 - Performance baseline
 
-## 17. Milestone definitions
+## 18. Milestone definitions
 
 ### Foundation Ready
 
@@ -359,7 +390,7 @@ E0 and E1 complete.
 
 ### Useful Assistant
 
-E2 and E3 complete.
+E2, E2.5, and E3 complete.
 
 ### Knowledge Assistant
 
@@ -377,7 +408,7 @@ E7 and E8 complete.
 
 E9 and E10 complete.
 
-## 18. Definition of Ready for an epic
+## 19. Definition of Ready for an epic
 
 An epic begins only when:
 
@@ -385,13 +416,14 @@ An epic begins only when:
 - Owning module is identified.
 - Data authority is known.
 - API and event boundaries are drafted.
+- Desktop and Control Center responsibilities are separated.
 - Risk and permissions are classified.
 - Audit and deletion behavior are defined.
 - Dependencies are complete.
 - Acceptance and abuse tests exist.
 - Open decisions have safe defaults.
 
-## 19. Definition of Done for an epic
+## 20. Definition of Done for an epic
 
 - Behavior implemented
 - Migrations reviewed
@@ -403,8 +435,9 @@ An epic begins only when:
 - Restore/deletion tested when relevant
 - No unresolved Critical vulnerability
 - Owner acceptance criteria met
+- Desktop behavior and Control Center visibility are both addressed when relevant
 
-## 20. Major execution risks
+## 21. Major execution risks
 
 | Risk | Mitigation |
 |---|---|
@@ -418,8 +451,10 @@ An epic begins only when:
 | Too many derived stores | Add only after measurable need |
 | Weak evaluation | Baseline datasets before optimization |
 | Solo-maintainer fatigue | Small milestones and automation |
+| Desktop app bypasses governance | All real capabilities go through backend APIs |
+| GUI freezes during voice/model calls | Dedicated audio/backend worker threads |
 
-## 21. Immediate initialization backlog
+## 22. Immediate initialization backlog
 
 1. Create backend and frontend directories.
 2. Pin runtime/tool versions.
@@ -437,6 +472,19 @@ An epic begins only when:
 14. Implement append-only audit foundation.
 15. Build empty Control Center navigation.
 
-## 22. Execution roadmap acceptance
+
+## 23. Immediate desktop backlog
+
+1. Decide desktop technology: Python CustomTkinter, PySide6, Pygame, Tauri, or Electron.
+2. Create `desktop/` project scaffold.
+3. Define backend client for login, health, conversations, message send, and response events.
+4. Build a non-blocking desktop shell with text input and response display.
+5. Add status animation states.
+6. Add push-to-talk placeholder and audio adapter interfaces.
+7. Add safe local config without secrets.
+8. Add desktop smoke test for API client and GUI startup where practical.
+9. Keep the web Control Center for permissions, audit, system state, and kill switch.
+
+## 24. Execution roadmap acceptance
 
 This roadmap is ready when implementation order, dependencies, phase gates, and the immediate initialization backlog are accepted, and code does not begin with a later phase while an earlier security dependency is missing.

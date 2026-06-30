@@ -1,7 +1,7 @@
 # Agent Design Research Notes
 
 **Status:** Active research notebook
-**Normative specification:** docs/07_AGENT_ARCHITECTURE.md
+**Normative specification:** docs/capabilities/07_AGENT_ARCHITECTURE.md
 
 ## Purpose
 

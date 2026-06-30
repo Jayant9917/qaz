@@ -4,13 +4,15 @@
 **Version:** 1.0
 **Owner:** Jay Rana
 **Product:** NOVO Personal AI Operating System
-**Last updated:** 2026-06-23
+**Last updated:** 2026-06-30
 
 ## 1. Executive vision
 
 NOVO is a personal AI operating system that helps its owner think, remember, learn, organize information, and carry out work across digital life.
 
-NOVO is not intended to be another chat interface. It combines:
+NOVO is not intended to be another chat interface or only a web application. Its primary owner-facing experience is a local Desktop Assistant: a real GUI with voice, presence, chat, and task interaction. The web frontend remains the Control Center for governance, settings, inspection, and recovery.
+
+NOVO combines:
 
 - Conversation
 - Reasoning
@@ -22,8 +24,9 @@ NOVO is not intended to be another chat interface. It combines:
 - Multi-model intelligence
 - Security and governance
 - A transparent Control Center
+- A local desktop assistant experience
 
-The long-term goal is a dependable personal AI companion that understands the owner's context, assists across applications and information sources, and becomes more useful over time without taking control away from the owner.
+The long-term goal is a dependable personal AI companion that understands the owner's context, assists across applications and information sources, and becomes more useful over time without taking control away from the owner. The desktop assistant is the face and voice; the backend is the governed brain; the Control Center is the owner's cockpit.
 
 ## 2. Product promise
 
@@ -157,7 +160,9 @@ NOVO routes work based on capability, privacy eligibility, context length, relia
 
 ### 7.6 Voice and presence
 
-NOVO evolves toward wake-word activation, speech recognition, natural spoken conversation, voice commands, and hands-free assistance. Voice actions obey the same identity, permission, approval, and audit rules as text actions.
+NOVO evolves toward a local desktop presence with speech recognition, text-to-speech, animated status, natural spoken conversation, voice commands, and hands-free assistance. Voice actions obey the same identity, permission, approval, and audit rules as text actions.
+
+The desktop assistant should feel like it can perform work, but it must call governed backend capabilities rather than directly bypassing the backend to read email, documents, memory, tools, credentials, or system state.
 
 ### 7.7 Automation
 
@@ -165,7 +170,9 @@ NOVO supports scheduled and event-driven workflows only within approved policies
 
 ### 7.8 Control Center
 
-The Control Center is the owner's operational cockpit for:
+The Control Center is the owner's operational cockpit and administrative dashboard. It is not the main daily assistant experience once the desktop app exists. It remains the place for deeper review, configuration, safety controls, and evidence.
+
+The Control Center manages:
 
 - Profile and preferences
 - Memories and memory access
@@ -285,7 +292,7 @@ Conduct conversations, capture notes, create drafts, retrieve information, and i
 NOVO's complete target capability map includes:
 
 - Authentication, sessions, and owner profile
-- Text and voice conversation
+- Desktop GUI, text conversation, and voice conversation
 - Conversation history and search
 - Personal memory lifecycle
 - Document ingestion and RAG
@@ -343,6 +350,8 @@ Every external data transfer should show which provider received which category 
 ## 13. User experience vision
 
 NOVO should feel calm, clear, and competent rather than magical or chaotic.
+
+The primary daily experience should be the NOVO Desktop Assistant: a local app that can listen, speak, display state, show answers, surface citations, and ask for approval. The web Control Center should remain available for detailed management tasks that are too complex or risky to compress into a voice-first interface.
 
 The interface should:
 
@@ -454,7 +463,8 @@ A feature is not complete merely because its happy-path API works.
 ## 17. Assumptions and constraints
 
 - Initial ownership is single-user.
-- Python/FastAPI powers the backend and Next.js/TypeScript the frontend.
+- Python/FastAPI powers the backend and Next.js/TypeScript the Control Center.
+- A desktop client will become the main owner-facing app; it must communicate through backend APIs and governed realtime channels.
 - PostgreSQL is durable authority; Redis is ephemeral; Milvus is derived search; RabbitMQ delivers jobs; MinIO stores objects.
 - OpenRouter is the initial external model gateway.
 - The agent framework is custom: no LangChain or LlamaIndex dependency at the core.
@@ -469,7 +479,7 @@ After the core is safe and reliable, NOVO may expand into:
 
 - Local models and offline mode
 - Knowledge graph and richer personal context
-- Desktop and mobile applications
+- Mobile applications
 - Real-time screen understanding
 - Sandboxed computer-use agents
 - Smart-home and wearable integration

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -31,6 +31,16 @@ type ConversationListResponse = {
 
 type MessageListResponse = {
   items: Message[];
+};
+
+type LocalMessageDraft = {
+  id: string;
+  conversation_id: string;
+  sequence_no: number;
+  role: string;
+  content: string;
+  created_at: string;
+  response_id?: string | null;
 };
 
 type ToastTone = "info" | "success" | "error";
@@ -86,6 +96,24 @@ function formatInlineText(text: string): ReactNode[] {
   }
 
   return parts;
+}
+
+function normalizeConversationTitle(value: string): string {
+  return value.replace(/\s+/g, " ").replace(/["'`]/g, "").trim();
+}
+
+function deriveConversationTitle(message: string): string {
+  const cleaned = normalizeConversationTitle(message)
+    .replace(/[^\w\s?-]/g, "")
+    .trim();
+
+  if (!cleaned) {
+    return "New chat";
+  }
+
+  const words = cleaned.split(/\s+/).slice(0, 6);
+  const title = words.join(" ");
+  return title.length > 48 ? `${title.slice(0, 45).trim()}...` : title;
 }
 
 function renderMessageContent(content: string): ReactNode[] {
@@ -147,7 +175,7 @@ export default function ChatPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
-  const [title, setTitle] = useState("New chat");
+  const [isSending, setIsSending] = useState(false);
   const [sidebarQuery, setSidebarQuery] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -168,10 +196,20 @@ export default function ChatPage() {
     }, 5000);
   }, [removeToast]);
 
-  const nextConversationTitle = useCallback(
-    (count: number) => `New chat ${count + 1}`,
-    [],
-  );
+  const nextConversationTitle = useCallback((items: Conversation[]) => {
+    const baseTitle = "New chat";
+    const existingTitles = new Set(items.map((conversation) => conversation.title.toLowerCase()));
+    if (!existingTitles.has(baseTitle.toLowerCase())) {
+      return baseTitle;
+    }
+
+    let index = 2;
+    while (existingTitles.has(`${baseTitle} ${index}`.toLowerCase())) {
+      index += 1;
+    }
+
+    return `${baseTitle} ${index}`;
+  }, []);
 
   const authFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -399,6 +437,151 @@ export default function ChatPage() {
     };
   }, [loadConversations, pushToast]);
 
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+    const conversationId = selectedConversationId;
+
+    async function refreshMessages() {
+      try {
+        await loadMessages(conversationId);
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Unable to load conversation messages.";
+          setStatus(message);
+          pushToast({ tone: "error", title: "Could not load messages", description: message });
+        }
+      }
+    }
+
+    void refreshMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadMessages, selectedConversationId, pushToast]);
+
+  const handleCreateConversation = useCallback(async () => {
+    setStatus(null);
+    try {
+      const conversationTitle = nextConversationTitle(conversations);
+      const response = await authFetch("/conversations", {
+        method: "POST",
+        body: JSON.stringify({ title: conversationTitle, classification: "private" }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(
+          getUserFacingErrorMessage(response.status, detail, `Failed to create conversation (${response.status})`),
+        );
+      }
+
+      const conversation = (await response.json()) as Conversation;
+      setConversations((current) => [conversation, ...current]);
+      setSelectedConversationId(conversation.id);
+      setStatus(`Conversation "${conversation.title}" created.`);
+      pushToast({
+        tone: "success",
+        title: "Conversation created",
+        description: `You can now message NOVO in "${conversation.title}".`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create conversation.";
+      setStatus(message);
+      pushToast({ tone: "error", title: "Could not create conversation", description: message });
+    }
+  }, [authFetch, conversations, nextConversationTitle, pushToast]);
+
+  const handleSendMessage = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedConversationId || !draft.trim() || isSending) {
+      return;
+    }
+
+    const draftText = draft.trim();
+    const pendingMessage: LocalMessageDraft = {
+      id: crypto.randomUUID(),
+      conversation_id: selectedConversationId,
+      sequence_no: messages.length + 1,
+      role: "user",
+      content: draftText,
+      created_at: new Date().toISOString(),
+      response_id: null,
+    };
+
+    setStatus(null);
+    setIsSending(true);
+    setMessages((current) => [...current, pendingMessage]);
+    setDraft("");
+
+    const shouldAutoRename = !selectedConversation || selectedConversation.title.toLowerCase().startsWith("new chat");
+    const nextConversationTitle = shouldAutoRename ? deriveConversationTitle(draftText) : null;
+
+    try {
+      const response = await authFetch(`/conversations/${selectedConversationId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ content: draftText, role: "user" }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(
+          getUserFacingErrorMessage(response.status, detail, `Failed to send message (${response.status})`),
+        );
+      }
+
+      const payload = (await response.json()) as SendMessageResponse;
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === pendingMessage.id
+            ? {
+                ...message,
+                id: payload.message.id,
+                sequence_no: payload.message.sequence_no,
+                created_at: payload.message.created_at,
+                response_id: payload.message.response_id,
+              }
+            : message,
+        ),
+      );
+
+      if (nextConversationTitle) {
+        try {
+          const renameResponse = await authFetch(`/conversations/${selectedConversationId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ title: nextConversationTitle }),
+          });
+
+          if (renameResponse.ok) {
+            const renamedConversation = (await renameResponse.json()) as Conversation;
+            setConversations((current) =>
+              current.map((conversation) =>
+                conversation.id === renamedConversation.id ? renamedConversation : conversation,
+              ),
+            );
+          }
+        } catch {
+          // Ignore rename failures; the chat still works.
+        }
+      }
+
+      startResponseStream(payload.response_id);
+    } catch (error) {
+      setMessages((current) => current.filter((message) => message.id !== pendingMessage.id));
+      const message = error instanceof Error ? error.message : "Failed to send message.";
+      setStatus(message);
+      pushToast({ tone: "error", title: "Message not sent", description: message });
+      setDraft(draftText);
+    } finally {
+      setIsSending(false);
+    }
+  }, [authFetch, draft, isSending, messages.length, pushToast, selectedConversation, selectedConversationId, startResponseStream]);
+
   return (
     <main className="chat-shell">
       <section className="chat-app">
@@ -539,8 +722,8 @@ export default function ChatPage() {
                   <button type="button" className="chat-compose-icon" aria-label="Voice input">
                     Mic
                   </button>
-                  <button className="chat-send-button" type="submit" disabled={!selectedConversationId || !draft.trim()}>
-                    Send
+                  <button className="chat-send-button" type="submit" disabled={!selectedConversationId || !draft.trim() || isSending}>
+                    {isSending ? "..." : "Send"}
                   </button>
                 </div>
               </div>

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 
 import httpx
@@ -20,6 +21,22 @@ from novo.models.registry import ModelCatalog
 logger = logging.getLogger(__name__)
 
 MAX_RESPONSE_SNIPPET_CHARS = 2000
+
+
+@dataclass(slots=True)
+class GatewayStreamChunk:
+    token: str = ""
+    done: bool = False
+    safe_text: str = ""
+    findings: list[GuardrailFinding] | None = None
+    provider_request_id: str | None = None
+    provider_name: str = ""
+    model_key: str = ""
+    used_fallback: bool = False
+    fallback_reason: str | None = None
+    fallback_detail_safe: str | None = None
+    attempts: int = 1
+    finish_reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -395,3 +412,220 @@ async def generate_model_reply(
         fallback_detail_safe=last_detail,
         attempts=len(candidates),
     )
+
+async def _stream_openrouter_model(
+    *,
+    model: ModelCatalog,
+    sanitized_user_message: str,
+    prompt_version: str,
+    system_prompt: str,
+    timeout_seconds: float,
+) -> AsyncIterator[GatewayStreamChunk]:
+    system_message = f"{system_prompt}\nPrompt version: {prompt_version}"
+    request_payload = {
+        "model": model.model_key,
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": sanitized_user_message},
+        ],
+        "temperature": 0.2,
+        "max_tokens": model.max_output_tokens,
+        "stream": True,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "HTTP-Referer": get_settings().frontend_origin,
+        "X-Title": get_settings().app_name,
+    }
+
+    settings = get_settings()
+    if settings.openrouter_api_key:
+        headers["Authorization"] = f"Bearer {settings.openrouter_api_key}"
+
+    provider_request_id: str | None = None
+    running_text: list[str] = []
+    finish_reason: str | None = None
+
+    try:
+        async with (
+            httpx.AsyncClient(timeout=timeout_seconds) as client,
+            client.stream(
+                "POST",
+                f"{settings.openrouter_base_url.rstrip('/')}/chat/completions",
+                headers=headers,
+                json=request_payload,
+            ) as response,
+        ):
+                provider_request_id = response.headers.get("x-request-id")
+                if provider_request_id is not None:
+                    provider_request_id = str(provider_request_id)
+                if not response.is_success:
+                    body = (await response.aread()).decode("utf-8", errors="replace")
+                    failure_reason = _classify_http_failure(response.status_code, body)
+                    fallback = build_stub_reply(
+                        sanitized_user_message,
+                        fallback_reason=failure_reason,
+                    )
+                    for token in fallback.safe_text.split():
+                        yield GatewayStreamChunk(token=token)
+                    yield GatewayStreamChunk(
+                        done=True,
+                        safe_text=fallback.safe_text,
+                        findings=fallback.findings,
+                        provider_request_id=provider_request_id,
+                        provider_name="fallback",
+                        model_key=model.model_key,
+                        used_fallback=True,
+                        fallback_reason=failure_reason,
+                        fallback_detail_safe=f"OpenRouter returned HTTP {response.status_code}.",
+                    )
+                    return
+
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line or line.startswith(":"):
+                        continue
+                    if line.startswith("data:"):
+                        line = line.split(":", 1)[1].strip()
+                    if line == "[DONE]":
+                        break
+                    try:
+                        payload = json.loads(line)
+                    except ValueError:
+                        continue
+                    if not isinstance(payload, dict):
+                        continue
+                    choices = payload.get("choices") or []
+                    if not choices:
+                        continue
+                    first_choice = choices[0] or {}
+                    finish_reason = str(first_choice.get("finish_reason") or "") or finish_reason
+                    delta = first_choice.get("delta") or {}
+                    token = str(delta.get("content") or "")
+                    if token:
+                        running_text.append(token)
+                        yield GatewayStreamChunk(token=token)
+    except httpx.TimeoutException:
+        fallback_reason = "openrouter_timeout"
+        fallback = build_stub_reply(sanitized_user_message, fallback_reason=fallback_reason)
+        for token in fallback.safe_text.split():
+            yield GatewayStreamChunk(token=token)
+        yield GatewayStreamChunk(
+            done=True,
+            safe_text=fallback.safe_text,
+            findings=fallback.findings,
+            provider_request_id=provider_request_id,
+            provider_name="fallback",
+            model_key=model.model_key,
+            used_fallback=True,
+            fallback_reason=fallback_reason,
+            fallback_detail_safe="Request timed out before OpenRouter responded.",
+        )
+        return
+    except httpx.RequestError:
+        fallback_reason = "openrouter_network_error"
+        fallback = build_stub_reply(sanitized_user_message, fallback_reason=fallback_reason)
+        for token in fallback.safe_text.split():
+            yield GatewayStreamChunk(token=token)
+        yield GatewayStreamChunk(
+            done=True,
+            safe_text=fallback.safe_text,
+            findings=fallback.findings,
+            provider_request_id=provider_request_id,
+            provider_name="fallback",
+            model_key=model.model_key,
+            used_fallback=True,
+            fallback_reason=fallback_reason,
+            fallback_detail_safe="Network error while calling OpenRouter.",
+        )
+        return
+
+    raw_text = "".join(running_text).strip()
+    if not raw_text:
+        fallback_reason = "empty_response"
+        fallback = build_stub_reply(sanitized_user_message, fallback_reason=fallback_reason)
+        for token in fallback.safe_text.split():
+            yield GatewayStreamChunk(token=token)
+        yield GatewayStreamChunk(
+            done=True,
+            safe_text=fallback.safe_text,
+            findings=fallback.findings,
+            provider_request_id=provider_request_id,
+            provider_name="fallback",
+            model_key=model.model_key,
+            used_fallback=True,
+            fallback_reason=fallback_reason,
+            fallback_detail_safe="OpenRouter returned an empty streaming response.",
+            finish_reason=finish_reason,
+        )
+        return
+
+    findings = inspect_text(raw_text)
+    safe_text = redact_sensitive_text(raw_text).strip() if findings else raw_text
+    if not safe_text:
+        fallback_reason = "empty_response_after_redaction"
+        fallback = build_stub_reply(sanitized_user_message, fallback_reason=fallback_reason)
+        for token in fallback.safe_text.split():
+            yield GatewayStreamChunk(token=token)
+        yield GatewayStreamChunk(
+            done=True,
+            safe_text=fallback.safe_text,
+            findings=fallback.findings,
+            provider_request_id=provider_request_id,
+            provider_name="fallback",
+            model_key=model.model_key,
+            used_fallback=True,
+            fallback_reason=fallback_reason,
+            fallback_detail_safe="OpenRouter response was fully redacted.",
+            finish_reason=finish_reason,
+        )
+        return
+
+    yield GatewayStreamChunk(
+        done=True,
+        safe_text=safe_text,
+        findings=findings,
+        provider_request_id=provider_request_id,
+        provider_name=model.provider,
+        model_key=model.model_key,
+        used_fallback=False,
+        finish_reason=finish_reason,
+    )
+
+
+async def stream_model_reply(
+    *,
+    model: ModelCatalog,
+    user_message: str,
+    prompt_version: str,
+    system_prompt: str,
+) -> AsyncIterator[GatewayStreamChunk]:
+    settings = get_settings()
+    sanitized_user_message = redact_sensitive_text(user_message)
+
+    if model.provider != "openrouter" or not settings.openrouter_api_key:
+        fallback = build_stub_reply(user_message, fallback_reason="missing_api_key")
+        for token in fallback.safe_text.split():
+            yield GatewayStreamChunk(token=token)
+        yield GatewayStreamChunk(
+            done=True,
+            safe_text=fallback.safe_text,
+            findings=fallback.findings,
+            provider_request_id=None,
+            provider_name="fallback",
+            model_key=model.model_key,
+            used_fallback=True,
+            fallback_reason="missing_api_key",
+            fallback_detail_safe="OpenRouter API key is missing or the provider is disabled.",
+        )
+        return
+
+    async for chunk in _stream_openrouter_model(
+        model=model,
+        sanitized_user_message=sanitized_user_message,
+        prompt_version=prompt_version,
+        system_prompt=system_prompt,
+        timeout_seconds=settings.openrouter_timeout_seconds,
+    ):
+        yield chunk

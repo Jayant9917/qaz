@@ -1,7 +1,7 @@
 # Security Research Notes
 
 **Status:** Active threat and control notebook
-**Normative specification:** docs/09_SECURITY_GOVERNANCE.md
+**Normative specification:** docs/capabilities/09_SECURITY_GOVERNANCE.md
 
 ## Purpose
 

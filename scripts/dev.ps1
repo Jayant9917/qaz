@@ -19,6 +19,43 @@ function Start-DevProcess {
     Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -NoNewWindow -PassThru
 }
 
+function Get-WslIp {
+    param(
+        [string]$Distro
+    )
+
+    $ip = & wsl.exe -d $Distro -- bash -lc "hostname -I | tr -s ' ' | cut -d' ' -f1"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to detect the WSL IP for distro '$Distro'."
+    }
+
+    $ip = ($ip | Select-Object -First 1).Trim()
+    if ([string]::IsNullOrWhiteSpace($ip)) {
+        throw "WSL IP lookup returned an empty value for distro '$Distro'."
+    }
+
+    return $ip
+}
+
+function Start-WslLocalhostProxy {
+    param(
+        [string]$Distro,
+        [int]$ListenPort = 3000,
+        [int]$TargetPort = 3000
+    )
+
+    $targetHost = Get-WslIp -Distro $Distro
+    Write-Host "Proxying http://127.0.0.1:$ListenPort -> $targetHost`:$TargetPort" -ForegroundColor Cyan
+
+    return Start-DevProcess -FilePath "node.exe" -WorkingDirectory $Root -Arguments @(
+        "scripts/wsl-localhost-proxy.mjs",
+        "--listen-host", "127.0.0.1",
+        "--listen-port", "$ListenPort",
+        "--target-host", $targetHost,
+        "--target-port", "$TargetPort"
+    )
+}
+
 function Stop-WslFrontendProcess {
     param(
         [string]$Distro
@@ -137,9 +174,16 @@ try {
             Wait-DevProcesses -Processes $processes
         }
         "frontend" {
+            $proxy = Start-WslLocalhostProxy -Distro $WslDistro
+            $processes = @($proxy)
             Stop-WslFrontendProcess -Distro $WslDistro
-            Write-Host "Frontend listening on http://127.0.0.1:3000 (WSL: $WslDistro)"
-            Invoke-WslFrontend -Distro $WslDistro
+            Write-Host "Frontend listening on http://127.0.0.1:3000 (via WSL distro: $WslDistro)"
+            Write-Host "If localhost does not open immediately, give the proxy a second to settle."
+            try {
+                Invoke-WslFrontend -Distro $WslDistro
+            } finally {
+                Stop-DevProcessTree -Processes $processes
+            }
         }
         "all" {
             Set-Location $Root
@@ -154,11 +198,13 @@ try {
                 "--port", "8000"
             )
 
-            $processes = @($backend)
+            $proxy = Start-WslLocalhostProxy -Distro $WslDistro
+            $processes = @($backend, $proxy)
+
             Write-Host "NOVO dev environment is running in the current terminal." -ForegroundColor Green
-            Write-Host "Frontend: http://127.0.0.1:3000 (WSL: $WslDistro)"
+            Write-Host "Frontend: http://127.0.0.1:3000 (proxied to WSL: $WslDistro)"
             Write-Host "Backend:  http://127.0.0.1:8000"
-            Write-Host "Press Ctrl+C to stop the backend and frontend processes."
+            Write-Host "Press Ctrl+C to stop the backend, proxy, and frontend processes."
 
             try {
                 Stop-WslFrontendProcess -Distro $WslDistro

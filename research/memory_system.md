@@ -1,7 +1,7 @@
 # Memory System Research Notes
 
 **Status:** Active research notebook
-**Normative specification:** docs/05_MEMORY_ARCHITECTURE.md
+**Normative specification:** docs/capabilities/05_MEMORY_ARCHITECTURE.md
 
 ## Purpose
 

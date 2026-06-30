@@ -61,25 +61,26 @@ The architecture documents were created first so the implementation would not dr
 
 ## 3. Documentation created so far
 
-The repository now has a full documentation set in `docs/`.
+The repository now has a full documentation set in `docs/` organized by folder so the purpose is obvious at a glance.
 
 The major files include:
 
-- `docs/01_PROJECT_VISION.md`
-- `docs/02_SYSTEM_ARCHITECTURE.md`
-- `docs/03_DATABASE_DESIGN.md`
-- `docs/04_EXECUTION_ROADMAP.md`
-- `docs/05_MEMORY_ARCHITECTURE.md`
-- `docs/06_RAG_ARCHITECTURE.md`
-- `docs/07_AGENT_ARCHITECTURE.md`
-- `docs/08_TOOL_FRAMEWORK.md`
-- `docs/09_SECURITY_GOVERNANCE.md`
-- `docs/10_API_SPECIFICATION.md`
-- `docs/11_FRONTEND_ARCHITECTURE.md`
-- `docs/12_DEPLOYMENT_ARCHITECTURE.md`
-- `docs/13_TESTING_STRATEGY.md`
-- `docs/14_OBSERVABILITY.md`
-- `docs/15_PRODUCT_ROADMAP.md`
+- `docs/foundation/01_PROJECT_VISION.md`
+- `docs/foundation/02_SYSTEM_ARCHITECTURE.md`
+- `docs/foundation/03_DATABASE_DESIGN.md`
+- `docs/foundation/04_EXECUTION_ROADMAP.md`
+- `docs/capabilities/05_MEMORY_ARCHITECTURE.md`
+- `docs/capabilities/06_RAG_ARCHITECTURE.md`
+- `docs/capabilities/07_AGENT_ARCHITECTURE.md`
+- `docs/capabilities/08_TOOL_FRAMEWORK.md`
+- `docs/capabilities/09_SECURITY_GOVERNANCE.md`
+- `docs/platform/10_API_SPECIFICATION.md`
+- `docs/platform/11_FRONTEND_ARCHITECTURE.md`
+- `docs/platform/12_DEPLOYMENT_ARCHITECTURE.md`
+- `docs/platform/13_TESTING_STRATEGY.md`
+- `docs/platform/14_OBSERVABILITY.md`
+- `docs/product/15_PRODUCT_ROADMAP.md`
+- `docs/product/16_DESKTOP_ASSISTANT_ARCHITECTURE.md`
 
 These docs are intentionally detailed. They define:
 

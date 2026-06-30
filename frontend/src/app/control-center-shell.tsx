@@ -1,9 +1,4 @@
-﻿import { AuditPanel } from "./audit-panel";
 import { BackendHealthCard } from "./backend-health-card";
-import { ControlStatePanel } from "./control-state-panel";
-import { OverviewPanels } from "./overview-panels";
-import { PermissionsPanel } from "./permissions-panel";
-import { SessionPanel } from "./session-panel";
 
 const navItems = [
   { label: "Overview", href: "#overview" },
@@ -13,12 +8,6 @@ const navItems = [
   { label: "Permissions", href: "/permissions" },
   { label: "Audit", href: "/audit" },
   { label: "Settings", href: "/settings" },
-];
-
-const quickStats = [
-  { label: "Phase", value: "E2 frontend control center", tone: "safe" },
-  { label: "Backend", value: "live", tone: "safe" },
-  { label: "Transport", value: "cookie session", tone: "muted" },
 ];
 
 const focusItems = [
@@ -73,113 +62,63 @@ export function ControlCenterShell() {
       </header>
 
       <section className="control-grid" aria-label="NOVO control center">
-        <aside className="left-rail" aria-label="Navigation and phase summary">
-          <section className="rail-card phase-card">
+        <section className="hero-panel" aria-labelledby="control-center-title">
+          <div className="hero-split">
+            <div className="hero-copy-column">
+              <div className="eyebrow">Visible product layer</div>
+              <h1 id="control-center-title">The place where NOVO becomes an interface.</h1>
+              <p className="lead hero-lead">
+                This shell is the owner-facing Control Center: calm, direct, and built to surface system state before
+                any advanced automation appears.
+              </p>
+
+              <div className="hero-actions">
+                <a className="primary-button" href="/login">
+                  Sign in
+                </a>
+                <a className="secondary-button" href="#identity">
+                  View identity
+                </a>
+              </div>
+            </div>
+
+            <div className="hero-visual-column" aria-label="NOVO dashboard preview">
+              <div className="hero-frame">
+                <video className="hero-video" autoPlay muted loop playsInline preload="metadata">
+                  <source src="/06037dd15f67cd8a21a4d627c5854160.mp4" type="video/mp4" />
+                </video>
+                <div className="hero-overlay" />
+                <div className="hero-card hero-card-left">
+                  <span className="status-dot status-safe" aria-hidden="true" />
+                  <div>
+                    <div className="card-label">Backend</div>
+                    <strong>live</strong>
+                  </div>
+                </div>
+                <BackendHealthCard />
+              </div>
+            </div>
+          </div>
+
+          <div className="hero-support-grid" aria-label="Control center highlights">
+            {focusItems.map((item) => (
+              <article key={item.title} className="rail-card focus-card">
+                <strong>{item.title}</strong>
+                <p>{item.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="phase-footer" aria-label="Current phase summary">
+          <section className="rail-card phase-card phase-card-bottom">
             <div className="card-label">Current phase</div>
             <p className="card-help">The active phase and what this screen is meant to show.</p>
             <strong>E2 frontend control center</strong>
             <p>Dashboard shell + live backend visibility.</p>
           </section>
-
-          <nav className="rail-nav" aria-label="Control center sections">
-            {navItems.map((item) => (
-              <a key={item.label} href={item.href} className="rail-link">
-                {item.label}
-              </a>
-            ))}
-          </nav>
-
-          <section className="rail-card status-stack">
-            {quickStats.map((item) => (
-              <div key={item.label} className="status-row">
-                <div>
-                  <span className="card-label">{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-                <span className={`status-pill status-pill-${item.tone}`}>{item.value}</span>
-              </div>
-            ))}
-          </section>
-        </aside>
-
-        <section className="hero-panel" aria-labelledby="control-center-title">
-          <div className="hero-copy-column">
-            <div className="eyebrow">Visible product layer</div>
-            <h1 id="control-center-title">The place where NOVO becomes an interface.</h1>
-            <p className="lead hero-lead">
-              This shell is the owner-facing Control Center: calm, direct, and built to surface system state before
-              any advanced automation appears.
-            </p>
-
-            <div className="hero-actions">
-              <a className="primary-button" href="/login">
-                Sign in
-              </a>
-              <a className="secondary-button" href="#identity">
-                View identity
-              </a>
-            </div>
-
-            <div className="focus-list">
-              {focusItems.map((item) => (
-                <article key={item.title} className="focus-card">
-                  <strong>{item.title}</strong>
-                  <p>{item.description}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <div className="hero-visual-column" aria-label="NOVO dashboard preview">
-            <div className="hero-frame">
-              <video className="hero-video" autoPlay muted loop playsInline preload="metadata">
-                <source src="/06037dd15f67cd8a21a4d627c5854160.mp4" type="video/mp4" />
-              </video>
-              <div className="hero-overlay" />
-              <div className="hero-card hero-card-left">
-                <span className="status-dot status-safe" aria-hidden="true" />
-                <div>
-                  <div className="card-label">Backend</div>
-                  <strong>live</strong>
-                </div>
-              </div>
-              <BackendHealthCard />
-            </div>
-          </div>
         </section>
-
-        <section className="overview-section">
-          <OverviewPanels />
-        </section>
-
-        <section className="governance-grid" aria-label="Governance surfaces">
-          <ControlStatePanel />
-          <PermissionsPanel />
-          <AuditPanel />
-        </section>
-
-        <aside className="right-rail">
-          <section className="rail-card rail-card-wide" id="identity">
-            <div className="card-label">Identity</div>
-            <SessionPanel />
-          </section>
-
-          <section className="rail-card rail-card-wide" id="sessions">
-            <div className="card-label">Control center focus</div>
-            <p className="card-help">Why these surfaces are present on this screen.</p>
-            <strong>Security-first foundations</strong>
-            <p>
-              Identity, sessions, permissions, and audit stay visible before advanced automation and companion
-              features are introduced.
-            </p>
-          </section>
-        </aside>
       </section>
     </main>
   );
 }
-
-
-
-
-

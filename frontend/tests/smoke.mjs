@@ -21,7 +21,7 @@ assert.match(shell, /Current phase/);
 assert.match(shell, /E2 frontend control center/);
 assert.match(shell, /Sign in/);
 assert.match(shell, /06037dd15f67cd8a21a4d627c5854160.mp4/);
-assert.match(shell, /SessionPanel/);
+assert.match(shell, /href="\/login"/);
 assert.match(shell, /BackendHealthCard/);
 assert.match(overview, /overview-grid/);
 assert.match(overview, /Audit snapshot/);

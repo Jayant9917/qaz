@@ -1,8 +1,8 @@
 # NOVO Frontend
 
-Next.js Control Center foundation for NOVO.
+Next.js Control Center foundation for NOVO. The main daily-use product direction is the NOVO Desktop Assistant; this frontend remains the web Control Center for governance, inspection, settings, audit, and recovery.
 
-This E2 Control Center shell exists to give the backend, API contracts, and future Control Center modules a stable browser home while the conversation fast path and phase handoff remain visible.
+This E2 Control Center shell gives the backend, API contracts, and future governance modules a stable browser home while the desktop assistant becomes the primary face of NOVO.
 
 ## Local commands
 
@@ -14,7 +14,7 @@ From the repository root:
 - Lint: `pnpm --filter @novo/frontend lint`
 - Type check: `pnpm --filter @novo/frontend typecheck`
 
-## E2 Control Center scope
+## Control Center scope
 
 - App router shell
 - Health/status page
@@ -24,4 +24,4 @@ From the repository root:
 - Browser session cookie handling with CSRF support
 - WSL-only frontend development on Windows when building or running Next.js
 
-Authentication, chat, approvals, permissions, memory, agents, tools, and audit screens start in later phases.
+Current implemented surfaces include login/session handling, chat, permissions, audit, settings, system-state views, and backend health. Future Control Center work should focus on memory review, documents/RAG management, model/prompt settings, tool permissions, approvals, agent-run inspection, and recovery while the desktop assistant handles daily interaction.

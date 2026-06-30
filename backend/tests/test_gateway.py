@@ -9,7 +9,7 @@ import pytest
 
 from novo.core.config import get_settings
 from novo.models import gateway
-from novo.models.gateway import generate_model_reply
+from novo.models.gateway import generate_model_reply, stream_model_reply
 from novo.models.registry import ModelCatalog
 
 
@@ -50,6 +50,41 @@ async def test_openrouter_gateway_falls_back_safely(monkeypatch: pytest.MonkeyPa
     assert reply.findings
     get_settings.cache_clear()
 
+
+
+@pytest.mark.asyncio
+async def test_stream_reply_yields_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NOVO_OPENROUTER_API_KEY", "")
+    get_settings.cache_clear()
+
+    model = ModelCatalog(
+        id=uuid4(),
+        provider="openrouter",
+        model_key="openrouter/free",
+        display_name="OpenRouter Free Router",
+        capabilities={"fast_path": True, "streaming": True},
+        context_window=8192,
+        max_output_tokens=256,
+        privacy_eligibility="private",
+        pricing={"input_minor": 0, "output_minor": 0, "currency": "USD"},
+        enabled=True,
+    )
+
+    chunks = [
+        chunk
+        async for chunk in stream_model_reply(
+            model=model,
+            user_message="Hello NOVO",
+            prompt_version="conversation.reply.v1",
+            system_prompt="You are NOVO.",
+        )
+    ]
+
+    assert any(chunk.token for chunk in chunks)
+    assert chunks[-1].done is True
+    assert chunks[-1].used_fallback is True
+    assert chunks[-1].fallback_reason == "missing_api_key"
+    get_settings.cache_clear()
 
 @pytest.mark.asyncio
 async def test_openrouter_gateway_retries_before_fallback(monkeypatch: pytest.MonkeyPatch) -> None:

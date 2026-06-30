@@ -1,7 +1,7 @@
 # RAG Research Notes
 
 **Status:** Active research notebook
-**Normative specification:** docs/06_RAG_ARCHITECTURE.md
+**Normative specification:** docs/capabilities/06_RAG_ARCHITECTURE.md
 
 ## Purpose
 

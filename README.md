@@ -2,12 +2,15 @@
 
 NOVO is an owner-controlled Personal AI Operating System.
 
-Current checkpoint: E2 complete / E3 ready. See [docs/architecture/17_E2_COMPLETE_E3_READY.md](D:/NOVO/docs/architecture/17_E2_COMPLETE_E3_READY.md).
+The primary product direction is now a local **NOVO Desktop Assistant**: a real desktop GUI with voice, presence, chat, and task interaction. The existing Next.js frontend remains important as the **NOVO Control Center** for permissions, audit, settings, system state, memory review, documents, models, tools, and recovery.
+
+Current checkpoint: E2 complete / E3 ready. See [docs/checkpoints/17_E2_COMPLETE_E3_READY.md](D:/NOVO/docs/checkpoints/17_E2_COMPLETE_E3_READY.md).
 
 ## Repository areas
 
 - backend: FastAPI modular application and workers
-- frontend: Next.js Control Center and chat shell
+- frontend: Next.js Control Center and administrative dashboard
+- desktop: planned local desktop assistant shell and voice interface
 - infra: local and production infrastructure definitions
 - prompts: version-controlled development prompt sources
 - scripts: developer commands
@@ -37,6 +40,8 @@ Frontend development and production builds should run through WSL Ubuntu on this
 
 Browser sessions use HttpOnly cookies with CSRF protection; bearer headers remain a compatibility path for non-browser clients only.
 
+The desktop assistant should talk to the backend APIs instead of directly reading documents, email, memory, tool credentials, or model providers. The backend remains the authority for permissions, audit, memory, RAG, tools, model calls, and kill-switch enforcement.
+
 See backend/README.md, frontend/README.md, and infra/README.md.
 
 ## Security
@@ -45,4 +50,8 @@ Never commit credentials or real owner data. OpenRouter and other provider secre
 
 ## Documentation
 
-Start with docs/01_PROJECT_VISION.md and docs/04_EXECUTION_ROADMAP.md.
+Start with docs/current/CURRENT_WORK.md for the latest live state, then read:
+
+- docs/foundation/01_PROJECT_VISION.md
+- docs/foundation/04_EXECUTION_ROADMAP.md
+- docs/product/16_DESKTOP_ASSISTANT_ARCHITECTURE.md

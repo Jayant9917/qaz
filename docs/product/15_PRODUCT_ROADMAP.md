@@ -2,7 +2,7 @@
 
 **Status:** Draft for owner review
 **Owner:** Jay Rana
-**Updated:** 2026-06-24
+**Updated:** 2026-06-30
 
 ## 1. Purpose
 
@@ -15,12 +15,13 @@ Dates should be assigned only after foundation estimates and capacity are known.
 NOVO evolves through these identities:
 
 1. Trusted private chat assistant
-2. Memory-enabled personal assistant
-3. Grounded personal knowledge assistant
-4. Governed operator
-5. Personal AI companion
-6. Bounded automation platform
-7. Advanced local-first personal AI OS
+2. Local desktop assistant with voice/presence
+3. Memory-enabled personal assistant
+4. Grounded personal knowledge assistant
+5. Governed operator
+6. Personal AI companion
+7. Bounded automation platform
+8. Advanced local-first personal AI OS
 
 Each stage must remain useful independently.
 
@@ -71,7 +72,33 @@ Exit:
 - Model failures degrade safely.
 - Usage, cost, and routing are visible.
 
-## 5. Release P2: Memory-enabled assistant
+## 5. Release P1.5: Desktop Assistant
+
+Owner value:
+
+- NOVO feels like a real local assistant instead of only a browser dashboard.
+- The owner can talk or type to a dedicated desktop app.
+- The assistant can show listening, thinking, speaking, blocked, and degraded states.
+
+Scope:
+
+- Desktop app shell
+- Backend health/session connection
+- Text chat through existing backend APIs
+- Streaming response display
+- Push-to-talk or microphone button
+- Speech-to-text and text-to-speech adapter boundaries
+- Basic assistant animation or presence surface
+- Non-blocking GUI/audio/backend threading
+
+Exit:
+
+- Desktop app can ask NOVO a question and display the answer.
+- Desktop app remains responsive during backend/model waits.
+- Desktop app does not directly access documents, email, tools, memory, credentials, or model providers.
+- Web Control Center remains available for settings, permissions, audit, and kill switch.
+
+## 6. Release P2: Memory-enabled assistant
 
 Owner value:
 
@@ -92,7 +119,7 @@ Exit:
 - Secrets cannot become memory.
 - Corrections and deletion propagate.
 
-## 6. Release P3: Personal knowledge assistant
+## 7. Release P3: Personal knowledge assistant
 
 Owner value:
 
@@ -114,7 +141,7 @@ Exit:
 - Prompt-injected sources cannot control NOVO.
 - Retrieval quality baseline is accepted.
 
-## 7. Release P4: Governed operator
+## 8. Release P4: Governed operator
 
 Owner value:
 
@@ -137,11 +164,12 @@ Exit:
 - Kill switch stops active work.
 - No model output directly executes.
 
-## 8. Release P5: Practical tools
+## 9. Release P5: Practical tools
 
 Owner value:
 
 - NOVO assists with notes, calendar, documents, email drafts, search, GitHub, and coding workflows.
+- Desktop assistant can present tool results naturally while the backend governs access.
 
 Scope expands capability by capability, not by giving broad application access.
 
@@ -156,7 +184,7 @@ Each tool ships with:
 - Dashboard history
 - Revocation
 
-## 9. Release P6: Companion foundation
+## 10. Release P6: Companion foundation
 
 Owner value:
 
@@ -178,7 +206,7 @@ Exit:
 - Inference is labeled, temporary where appropriate, and editable.
 - Owner-defined goals remain authoritative.
 
-## 10. Release P7: Reflection and automation
+## 11. Release P7: Reflection and automation
 
 Owner value:
 
@@ -200,7 +228,7 @@ Exit:
 - Automations stop on policy/budget changes.
 - Owner sees every run and can revoke it.
 
-## 11. Release P8: Knowledge graph
+## 12. Release P8: Knowledge graph
 
 Owner value:
 
@@ -220,11 +248,11 @@ Exit:
 - PostgreSQL authorization remains final.
 - Graph is rebuildable and deletion-aware.
 
-## 12. Release P9: Voice
+## 13. Release P9: Advanced voice
 
 Owner value:
 
-- Natural hands-free interaction.
+- More natural hands-free interaction beyond the P1.5 prototype.
 
 Scope:
 
@@ -241,7 +269,7 @@ Exit:
 - Voice follows the same permission and audit model.
 - Sensitive actions never rely on uncertain voice identity alone.
 
-## 13. Release P10: Computer interaction
+## 14. Release P10: Computer interaction
 
 Owner value:
 
@@ -263,7 +291,7 @@ Exit:
 - Critical actions remain explicitly approved.
 - Host secrets and unrelated applications remain inaccessible.
 
-## 14. Release P11: Local and offline intelligence
+## 15. Release P11: Local and offline intelligence
 
 Owner value:
 
@@ -284,9 +312,9 @@ Exit:
 - Private classifications remain local.
 - Switching providers does not change product behavior.
 
-## 15. Future directions
+## 16. Future directions
 
-- Desktop and mobile applications
+- Mobile applications
 - Wearable integration
 - Smart home
 - Multi-agent collaboration
@@ -298,7 +326,7 @@ Exit:
 
 Future features never weaken owner control.
 
-## 16. Product health metrics
+## 17. Product health metrics
 
 - Weekly useful tasks completed
 - Owner-confirmed time saved
@@ -308,6 +336,7 @@ Future features never weaken owner control.
 - Tool success and ambiguous-outcome rate
 - Automation intervention rate
 - Fast-path latency
+- Desktop response latency and GUI responsiveness
 - Cost per useful task
 - Kill-switch and privacy incidents
 - Companion feature opt-out/reset rate
@@ -315,7 +344,7 @@ Future features never weaken owner control.
 
 Engagement time alone is not success.
 
-## 17. Roadmap decision rules
+## 18. Roadmap decision rules
 
 Advance when:
 
@@ -334,6 +363,6 @@ Delay or remove when:
 - Maintenance cost exceeds personal value.
 - A simpler deterministic workflow works better.
 
-## 18. Definition of roadmap success
+## 19. Definition of roadmap success
 
 NOVO succeeds when it becomes a trusted daily system that saves time, improves recall and organization, supports growth, and performs approved work transparently without making the owner less informed, less private, or less in control.

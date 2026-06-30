@@ -1,7 +1,7 @@
 # Tool Calling Research Notes
 
 **Status:** Active adapter and safety notebook
-**Normative specification:** docs/08_TOOL_FRAMEWORK.md
+**Normative specification:** docs/capabilities/08_TOOL_FRAMEWORK.md
 
 ## Purpose
 

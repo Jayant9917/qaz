@@ -3,11 +3,13 @@
 **Status:** Draft for owner review
 **Owner:** Jay Rana
 **Framework:** Next.js and TypeScript
-**Updated:** 2026-06-24
+**Updated:** 2026-06-30
 
 ## 1. Purpose
 
-The frontend is NOVO's conversation surface and Control Center. It must make capability, state, risk, evidence, memory, approvals, and failures understandable without pretending UI controls are security enforcement.
+The frontend is NOVO's web Control Center. It is not the main daily-use assistant once the desktop app exists. It must make capability, state, risk, evidence, memory, approvals, and failures understandable without pretending UI controls are security enforcement.
+
+The NOVO Desktop Assistant is the primary daily interaction surface for voice, presence, chat, and task flow. This web frontend remains the administrative and inspection surface.
 
 ## 2. Principles
 
@@ -53,6 +55,8 @@ The frontend is NOVO's conversation surface and Control Center. It must make cap
 - System Controls
 - Settings
 - Recovery
+
+The web chat route remains useful for testing, fallback, and detailed conversation review, but the desktop assistant owns the main talk-to-NOVO experience.
 
 ## 5. Route structure
 
@@ -134,7 +138,7 @@ Session cookie remains HttpOnly. The browser reads only the companion CSRF cooki
 
 ## 9. Chat experience
 
-Chat shows:
+Web chat shows:
 
 - Owner and NOVO messages
 - Streaming status
@@ -150,6 +154,8 @@ Chat shows:
 - Memory-use indicator
 
 Do not expose hidden chain-of-thought.
+
+The desktop assistant may present the same conversation through a more compact, voice-first surface. The backend response contract should support both clients.
 
 ## 10. Composer
 
@@ -414,6 +420,8 @@ Persistent visibility:
 
 Kill switch is easy to activate and deliberately harder to deactivate.
 
+The Control Center remains the preferred place for detailed system controls even after the desktop app exists. The desktop app may expose emergency stop/kill-switch affordances, but detailed recovery and inspection belong here.
+
 ## 26. Recovery mode
 
 Minimal local UI independent of models/tools:
@@ -556,6 +564,7 @@ Reusable components:
 ## 36. Definition of done
 
 - Every major backend capability has a transparent owner-facing surface.
+- Capabilities used by the desktop assistant have corresponding Control Center visibility where review, correction, audit, or configuration is required.
 - Suggestions, approvals, execution, and completion are distinct.
 - Memory, evidence, policy, audit, and egress are inspectable.
 - Critical controls remain usable during model outage.

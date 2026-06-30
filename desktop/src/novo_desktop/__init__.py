@@ -1,0 +1,1 @@
+"""NOVO Desktop Assistant package."""

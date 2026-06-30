@@ -1,7 +1,7 @@
 # NOVO System Architecture
 
 **Status:** Draft for owner review
-**Version:** 0.1 | **Owner:** Jay Rana | **Updated:** 2026-06-23
+**Version:** 0.1 | **Owner:** Jay Rana | **Updated:** 2026-06-30
 **Default security mode:** Assistant Mode
 
 ## 1. Purpose
@@ -27,7 +27,9 @@ Priority: safety -> privacy/integrity -> explainability/auditability -> correctn
 
 ```mermaid
 flowchart TB
-    Owner["Owner"] --> Web["Next.js Web App"]
+    Owner["Owner"] --> Desktop["NOVO Desktop Assistant"]
+    Owner --> Web["Next.js Control Center"]
+    Desktop -->|"HTTPS + SSE/WSS"| API["FastAPI API"]
     Web -->|"HTTPS + SSE/WSS"| API["FastAPI API"]
     API --> Gov["Security & Governance"]
     API --> Agent["Agent Engine"]
@@ -56,7 +58,7 @@ flowchart TB
     OR --> LLM["LLM Providers"]
 ```
 
-Clients never access infrastructure, model providers, or credentials directly. OpenRouter, models, websites, email, documents, and tool providers are untrusted external systems.
+Clients never access infrastructure, model providers, email, documents, tools, memory stores, or credentials directly. The desktop assistant is the primary daily-use client, but it is still only a client. OpenRouter, models, websites, email, documents, and tool providers are untrusted external systems.
 
 ## 4. Architecture style
 
@@ -75,9 +77,25 @@ Bounded reads, policy checks, approvals, and chat streaming are synchronous. Ing
 
 ## 5. Component contracts
 
-### 5.1 Frontend - Next.js
+### 5.1 Desktop Assistant - primary client
 
-Provides chat, Control Center, memory, documents, approvals, audit, agent runs, tools, analytics, settings, and kill-switch UI. It shows exact action previews and honest pending/degraded/failure states.
+The NOVO Desktop Assistant is the main daily-use owner interface. It provides a local app window with text chat, voice input, speech output, animated status, conversation state, source summaries, approval prompts, and task progress.
+
+Responsibilities:
+
+- Present listening, thinking, speaking, retrieving, waiting, executing, blocked, and degraded states.
+- Send text and voice-derived requests to the backend.
+- Display and speak backend responses.
+- Show citations, warnings, tool proposals, and approval requirements returned by the backend.
+- Keep audio capture, speech recognition, speech playback, and backend calls off the GUI thread so the interface does not freeze.
+- Avoid storing credentials, secrets, raw provider keys, or authoritative memory locally.
+- Treat all backend state as authoritative and all local cache as disposable.
+
+The desktop assistant must not directly read email, documents, memory databases, tool credentials, or model providers. It calls governed backend APIs and realtime channels.
+
+### 5.2 Frontend - Next.js Control Center
+
+Provides the web Control Center: memory, documents, approvals, audit, agent runs, tools, analytics, settings, system controls, recovery, and administrative chat/debug surfaces. It shows exact action previews and honest pending/degraded/failure states.
 
 - HTTPS/JSON for commands and queries.
 - SSE for tokens, run events, and job progress.
@@ -87,13 +105,13 @@ Provides chat, Control Center, memory, documents, approvals, audit, agent runs, 
 - Restrictive CSP; all model/document/tool content rendered as untrusted.
 - UI hiding is never authorization; no credentials enter client bundles.
 
-### 5.2 Backend - FastAPI
+### 5.3 Backend - FastAPI
 
 Owns versioned APIs, Pydantic contracts, authentication, orchestration, governance enforcement, durable writes, job submission, telemetry, and audit.
 
 Every request: create trace ID -> enforce transport limits -> authenticate -> check session/kill switch -> rate limit -> validate schema -> authorize exact capability/resource -> run use case -> commit required audit evidence -> return privacy-safe typed output.
 
-### 5.3 PostgreSQL - durable authority
+### 5.4 PostgreSQL - durable authority
 
 Authoritative for identities, sessions, conversations/messages, memories/revisions, document/chunk metadata, agent runs/steps, tools/capabilities, permissions/policies, approvals, jobs/outbox, model usage, and audit events.
 
@@ -103,7 +121,7 @@ Authoritative for identities, sessions, conversations/messages, memories/revisio
 - Binaries go to MinIO and secrets to the vault.
 - Cross-system effects use a transactional outbox.
 
-### 5.4 Redis - reconstructable ephemeral state
+### 5.5 Redis - reconstructable ephemeral state
 
 Stores session cache/revocations, short-term working memory, progress/stream cursors, rate limits, leased locks, hot policy versions, and immediate kill-switch projection.
 
@@ -112,7 +130,7 @@ Stores session cache/revocations, short-term working memory, progress/stream cur
 - Total loss may hurt performance, never destroy truth.
 - Pub/Sub is for disposable UI events, never durable jobs.
 
-### 5.5 Milvus - derived vector index
+### 5.6 Milvus - derived vector index
 
 Stores vectors for document chunks, semantic memories, and optional episode summaries.
 
@@ -122,7 +140,7 @@ Stores vectors for document chunks, semantic memories, and optional episode summ
 - A PostgreSQL restriction/deletion blocks use immediately even before vector cleanup.
 - Version collections by model/dimension; Milvus must be fully rebuildable.
 
-### 5.6 RabbitMQ - durable asynchronous delivery
+### 5.7 RabbitMQ - durable asynchronous delivery
 
 Exchanges: `novo.commands`, `novo.events`, and `novo.dead_letter`. Initial queues: `document.ingest`, `document.embed`, `memory.embed`, `memory.consolidate`, `agent.execute`, `voice.transcribe`, `automation.execute`, `audit.export`, and `maintenance.cleanup`.
 
@@ -133,7 +151,7 @@ Exchanges: `novo.commands`, `novo.events`, and `novo.dead_letter`. Initial queue
 - Outbox plus processed-message records prevents lost/duplicate effects.
 - RabbitMQ is not a business database or audit log.
 
-### 5.7 MinIO - objects
+### 5.8 MinIO - objects
 
 Stores documents, media, screenshots, artifacts, quarantined uploads, and encrypted exports/backups. Private buckets: `novo-documents`, `novo-media`, `novo-artifacts`, `novo-quarantine`, `novo-backups`.
 
@@ -143,7 +161,7 @@ Stores documents, media, screenshots, artifacts, quarantined uploads, and encryp
 - Private access, short-lived presigned URLs, encryption, and versioning.
 - Governed deletion and PostgreSQL/MinIO orphan reconciliation.
 
-### 5.8 OpenRouter - external model gateway
+### 5.9 OpenRouter - external model gateway
 
 Only the backend's provider-neutral Model Gateway calls OpenRouter. Routing considers capability, sensitivity, provider policy, context, latency, availability, and budget.
 
@@ -151,11 +169,11 @@ Flow: minimize context -> retrieve authorized data -> Privacy Firewall/secret sc
 
 Secret and Restricted data cannot leave NOVO by default. Confidential data needs an explicit compatible policy. Fallback cannot choose a weaker provider. Models propose actions but cannot authorize or execute them.
 
-### 5.9 Security and Governance - mandatory control plane
+### 5.10 Security and Governance - mandatory control plane
 
 Contains the Policy Decision Point, enforcement at all protected boundaries, Privacy Firewall, Approval Engine, Secrets Provider, append-only Audit Service, and Kill Switch. No alternate path may reach a model, tool, protected memory, export, or destructive operation.
 
-### 5.10 Observability
+### 5.11 Observability
 
 Operational telemetry is separate from audit evidence. Langfuse may track AI performance/cost but is not the audit authority. Propagate W3C trace context and shared request, correlation, owner, and agent-run IDs. Redact secrets and tokens before emission.
 
@@ -163,8 +181,10 @@ Operational telemetry is separate from audit evidence. Langfuse may track AI per
 
 | Source | Destination | Protocol | Purpose |
 |---|---|---|---|
-| Client | FastAPI | HTTPS/JSON | Commands, queries, approvals |
-| Client | FastAPI | SSE/WSS | Streams and realtime control |
+| Desktop Assistant | FastAPI | HTTPS/JSON | Commands, queries, approvals |
+| Desktop Assistant | FastAPI | SSE/WSS | Streams, voice session events, task progress |
+| Web Control Center | FastAPI | HTTPS/JSON | Administration, commands, queries, approvals |
+| Web Control Center | FastAPI | SSE/WSS | Streams and realtime control |
 | Application | PostgreSQL | PostgreSQL/TLS | Transactions |
 | Application | Redis | RESP/TLS/private | Ephemeral state |
 | Memory/RAG | Milvus | gRPC/TLS/private | Vector operations |
@@ -180,7 +200,9 @@ Network access never grants authorization. Each runtime role receives least-priv
 
 ### 7.1 Chat
 
-Authenticate/mode/kill-switch -> persist user message -> start agent run -> obtain policy scope -> retrieve and re-authorize context -> minimize/redact -> select eligible model -> OpenRouter call -> validate response -> persist response, routing explanation, usage and audit -> SSE to client.
+Authenticate/mode/kill-switch -> persist user message -> choose fast or deep path -> obtain policy scope -> retrieve and re-authorize context -> minimize/redact -> select eligible model -> OpenRouter call -> validate response -> persist response, routing explanation, usage and audit -> SSE to client.
+
+Desktop chat uses the same backend flow as web chat. Voice input is transcribed into a governed request; speech output is a presentation layer over the backend response.
 
 ### 7.2 Tool action
 
@@ -207,6 +229,7 @@ Strong authentication -> durable PostgreSQL state/audit + immediate Redis flag -
 | Runs/approvals/jobs | PostgreSQL | Redis/RabbitMQ |
 | Secrets | Vault | Short-lived process memory |
 | Audit | PostgreSQL append-only | Optional read projection |
+| Desktop UI state | Backend/PostgreSQL for truth | Local cache, transcript buffer, animation state |
 
 No distributed transactions. Use local transaction + outbox, workflow state machines, compensating actions, and idempotency keys. Security state is authoritative/fail-closed; caches, indexes, analytics, and progress may be eventually consistent.
 
