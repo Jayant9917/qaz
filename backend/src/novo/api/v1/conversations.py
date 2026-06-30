@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from novo.api.dependencies import RequestIdentity, get_request_identity, require_csrf_protection
@@ -39,6 +40,7 @@ from novo.models.accounting import (
     get_model_by_key,
 )
 from novo.models.gateway import generate_model_reply
+from novo.models.registry import ModelCatalog
 from novo.models.service import resolve_route_selection
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -168,6 +170,27 @@ def _sse_event(event_id: int, event_name: str, payload: BaseModel) -> str:
     return f"id: {event_id}\nevent: {event_name}\ndata: {payload.model_dump_json()}\n\n"
 
 
+OPENROUTER_RETRY_MODEL_KEYS: tuple[str, ...] = (
+    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "poolside/laguna-m1:free",
+)
+
+
+async def _load_retry_models(
+    db: AsyncSession,
+    *,
+    selected_model_key: str,
+) -> list[ModelCatalog]:
+    fallback_models: list[ModelCatalog] = []
+    for model_key in OPENROUTER_RETRY_MODEL_KEYS:
+        if model_key == selected_model_key:
+            continue
+        model = await get_model_by_key(db, "openrouter", model_key)
+        if model is not None:
+            fallback_models.append(model)
+    return fallback_models
+
 @router.get("", response_model=ConversationListResponse)
 async def get_conversations(
     identity: Annotated[RequestIdentity, Depends(get_request_identity)],
@@ -183,12 +206,19 @@ async def post_conversation(
     identity: Annotated[RequestIdentity, Depends(require_csrf_protection)],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> ConversationResponse:
-    conversation = await create_conversation(
-        db,
-        owner_id=identity.user.id,
-        title=payload.title,
-        classification=payload.classification,
-    )
+    try:
+        conversation = await create_conversation(
+            db,
+            owner_id=identity.user.id,
+            title=payload.title,
+            classification=payload.classification,
+        )
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Conversation title already exists for this owner",
+        ) from exc
     return _conversation_response(conversation)
 
 
@@ -313,13 +343,21 @@ async def _ensure_response_ready(
         return response
 
     system_prompt = (
-        "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully."
+        "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
+        "Write in plain text with short paragraphs. If you use headings, put them on their own line "
+        "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
+        "Avoid dense markdown formatting unless the user explicitly asks for it."
+    )
+    fallback_models = await _load_retry_models(
+        db,
+        selected_model_key=model.model_key,
     )
     reply_result = await generate_model_reply(
         model=model,
         user_message=user_message.content,
         prompt_version=response.prompt_version,
         system_prompt=system_prompt,
+        fallback_models=fallback_models,
     )
     if not reply_result.safe_text.strip():
         await fail_response_run(db, response=response, error_message="Empty response text")
@@ -350,16 +388,27 @@ async def _ensure_response_ready(
     assistant_message.model_call_id = model_call.id
     if reply_result.provider_request_id is not None:
         model_call.provider_request_id = reply_result.provider_request_id
+    metadata: dict[str, object] = {}
     if reply_result.findings:
-        assistant_message.metadata_json = {
-            "guardrail_warnings": [finding.code for finding in reply_result.findings],
-        }
+        metadata["guardrail_warnings"] = [finding.code for finding in reply_result.findings]
+    if reply_result.used_fallback and reply_result.fallback_reason:
+        metadata["fallback_used"] = True
+        metadata["fallback_reason"] = reply_result.fallback_reason
+        if reply_result.fallback_detail_safe:
+            metadata["fallback_detail_safe"] = reply_result.fallback_detail_safe
+        metadata["attempts"] = reply_result.attempts
+    if metadata:
+        assistant_message.metadata_json = metadata
     await complete_model_call(
         db,
         call=model_call,
         response_text=reply_result.safe_text,
         output_tokens=len(reply_result.safe_text.split()),
         latency_ms=25,
+        warning_code=reply_result.fallback_reason if reply_result.used_fallback else None,
+        warning_detail_safe=(
+            reply_result.fallback_detail_safe if reply_result.used_fallback else None
+        ),
     )
     await complete_response_run(
         db,
@@ -426,29 +475,6 @@ async def stream_response_events(
                 user_message_id=response.user_message_id,
             ),
         )
-        if not response.response_text:
-            yield _sse_event(
-                context_event_id + 1,
-                "response.failed",
-                ResponseEventFailed(response_id=response.id, error_message="Empty response text"),
-            )
-            return
-
-        running_text = []
-        for index, token in enumerate(response.response_text.split(), start=1):
-            running_text.append(token)
-            yield _sse_event(
-                context_event_id + index,
-                "response.token",
-                ResponseEventToken(
-                    response_id=response.id,
-                    index=index,
-                    token=token,
-                    content=" ".join(running_text),
-                ),
-            )
-            await asyncio.sleep(0)
-
         assistant_query = await db.execute(
             select(Message).where(
                 Message.parent_message_id == response.user_message_id,
@@ -468,8 +494,49 @@ async def stream_response_events(
             )
             return
 
+        next_event_id = context_event_id + 1
+        assistant_metadata = (
+            assistant_message_obj.metadata_json if assistant_message_obj is not None else {}
+        )
+        fallback_reason = None
+        if isinstance(assistant_metadata, dict):
+            fallback_reason = str(assistant_metadata.get("fallback_reason") or "") or None
+        if fallback_reason:
+            yield _sse_event(
+                next_event_id,
+                "response.warning",
+                ResponseEventWarning(
+                    response_id=response.id,
+                    warnings=[f"fallback:{fallback_reason}"],
+                ),
+            )
+            next_event_id += 1
+        if not response.response_text:
+            yield _sse_event(
+                next_event_id,
+                "response.failed",
+                ResponseEventFailed(response_id=response.id, error_message="Empty response text"),
+            )
+            return
+
+        running_text = []
+        for index, token in enumerate(response.response_text.split(), start=1):
+            running_text.append(token)
+            yield _sse_event(
+                next_event_id,
+                "response.token",
+                ResponseEventToken(
+                    response_id=response.id,
+                    index=index,
+                    token=token,
+                    content=" ".join(running_text),
+                ),
+            )
+            next_event_id += 1
+            await asyncio.sleep(0)
+
         yield _sse_event(
-            context_event_id + 1 + len(response.response_text.split()),
+            next_event_id,
             "response.completed",
             ResponseEventCompleted(
                 response_id=response.id,

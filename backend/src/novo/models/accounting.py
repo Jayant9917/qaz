@@ -98,6 +98,8 @@ async def complete_model_call(
     response_text: str,
     output_tokens: int,
     latency_ms: int,
+    warning_code: str | None = None,
+    warning_detail_safe: str | None = None,
 ) -> ModelCall:
     call.status = "completed"
     call.output_tokens = output_tokens
@@ -106,8 +108,8 @@ async def complete_model_call(
     call.currency = str((call.model.pricing or {}).get("currency", "USD"))
     call.response_hash = sha256(response_text.encode("utf-8")).hexdigest()
     call.finished_at = datetime.now(UTC)
-    call.error_code = None
-    call.error_detail_safe = None
+    call.error_code = warning_code
+    call.error_detail_safe = warning_detail_safe
     await db.flush()
     return call
 

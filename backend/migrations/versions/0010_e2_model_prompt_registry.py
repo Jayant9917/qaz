@@ -21,7 +21,12 @@ MODEL_FAST_ID = uuid4()
 MODEL_DEEP_ID = uuid4()
 MODEL_ECHO_ID = uuid4()
 PROMPT_TEMPLATE_ID = uuid4()
-PROMPT_CONTENT = "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully."
+PROMPT_CONTENT = (
+    "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
+    "Write in plain text with short paragraphs. If you use headings, put them on their own line "
+    "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
+    "Avoid dense markdown formatting unless the user explicitly asks for it."
+)
 PROMPT_CONTENT_HASH = sha256(PROMPT_CONTENT.encode("utf-8")).hexdigest()
 PROMPT_VERSION_ID = uuid4()
 PROMPT_BINDING_ID = uuid4()

@@ -42,6 +42,14 @@ def test_conversation_lifecycle(client: TestClient) -> None:
     assert conversation["title"] == "First chat"
     assert conversation["status"] == "active"
 
+    duplicate = client.post(
+        "/api/v1/conversations",
+        headers=headers,
+        json={"title": "First chat", "classification": "private"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "Conversation title already exists for this owner"
+
     listed = client.get("/api/v1/conversations", headers=headers)
     assert listed.status_code == 200
     assert listed.json()["items"][0]["id"] == conversation["id"]
@@ -68,12 +76,12 @@ def test_conversation_lifecycle(client: TestClient) -> None:
 
     messages = client.get(f"/api/v1/conversations/{conversation['id']}/messages", headers=headers)
     assert messages.status_code == 200
-    contents = [item["content"] for item in messages.json()["items"]]
+    items = messages.json()["items"]
+    contents = [item["content"] for item in items]
     assert "Hello NOVO" in contents
-    assert any(
-        item.startswith("Hello.") or item.startswith("I heard you say:")
-        for item in contents
-    )
+    assistant_messages = [item for item in items if item["role"] == "assistant"]
+    assert assistant_messages
+    assert assistant_messages[-1]["content"].strip()
 
     archived = client.post(f"/api/v1/conversations/{conversation['id']}/archive", headers=headers)
     assert archived.status_code == 200

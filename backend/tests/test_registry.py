@@ -36,7 +36,10 @@ def test_registry_endpoints_expose_seeded_models_and_prompts(client: TestClient)
     assert models.status_code == 200
     model_items = models.json()["items"]
     assert len(model_items) >= 3
-    assert any(item["model_key"] == "openrouter/free/fast" for item in model_items)
+    openrouter_free = next(
+        item for item in model_items if item["model_key"] == "openrouter/free"
+    )
+    assert openrouter_free["max_output_tokens"] == 256
 
     policies = client.get("/api/v1/model-policies", headers=headers)
     assert policies.status_code == 200

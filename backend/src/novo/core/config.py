@@ -1,18 +1,23 @@
 """Typed application configuration."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+BACKEND_ROOT = Path(__file__).resolve().parents[3]
+ENV_FILES = (PROJECT_ROOT / ".env", BACKEND_ROOT / ".env")
+
 
 class Settings(BaseSettings):
     """Validated NOVO runtime settings."""
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "../.env"),
+        env_file=ENV_FILES,
         env_prefix="NOVO_",
         case_sensitive=False,
         extra="ignore",

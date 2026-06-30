@@ -1,22 +1,26 @@
 {
-  "name": "novo",
-  "version": "0.1.0",
-  "private": true,
-  "packageManager": "pnpm@10.34.4",
-  "engines": {
-    "node": ">=20 <21"
-  },
-  "scripts": {
-    "dev": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target all",
-    "dev:backend": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target backend",
-    "dev:frontend": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target frontend",
-    "dev:frontend:wsl": "node scripts/run-frontend.mjs dev",
-    "dev:infra": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target infra",
-    "build": "node scripts/run-frontend.mjs build",
-    "build:wsl": "node scripts/run-frontend.mjs build",
-    "lint": "pnpm --filter @novo/frontend lint",
-    "typecheck": "pnpm --filter @novo/frontend typecheck",
-    "test": "pnpm --filter @novo/frontend test",
-    "quality": "pnpm lint && pnpm typecheck && pnpm test"
-  }
+    "name":  "novo",
+    "version":  "0.1.0",
+    "private":  true,
+    "packageManager":  "pnpm@10.34.4",
+    "engines":  {
+                    "node":  "\u003e=20 \u003c21"
+                },
+    "scripts":  {
+                    "dev":  "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target all -ResetPorts",
+                    "dev:backend":  "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target backend -ResetPorts",
+                    "dev:frontend":  "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target frontend -ResetPorts",
+                    "dev:frontend:wsl":  "node scripts/run-frontend.mjs dev",
+                    "dev:infra":  "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 -Target infra",
+                    "build":  "node scripts/run-frontend.mjs build",
+                    "build:wsl":  "node scripts/run-frontend.mjs build",
+                    "lint":  "pnpm --filter @novo/frontend lint",
+                    "typecheck":  "pnpm --filter @novo/frontend typecheck",
+                    "test":  "pnpm --filter @novo/frontend test",
+                    "quality":  "pnpm lint \u0026\u0026 pnpm typecheck \u0026\u0026 pnpm test",
+                    "ports:free":  "powershell -ExecutionPolicy Bypass -File scripts/free-ports.ps1",
+                    "lint:backend":  "powershell -ExecutionPolicy Bypass -File scripts/ruff.ps1 check src tests",
+                    "quality:backend":  "pnpm lint:backend \u0026\u0026 pnpm --filter @novo/frontend lint \u0026\u0026 pnpm --filter @novo/frontend typecheck \u0026\u0026 pnpm --filter @novo/frontend test",
+                    "quality:all":  "pnpm quality:backend"
+                }
 }

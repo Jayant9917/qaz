@@ -1,7 +1,8 @@
 param(
     [ValidateSet("backend", "frontend", "infra", "all")]
     [string]$Target = "all",
-    [string]$WslDistro = "Ubuntu"
+    [string]$WslDistro = "Ubuntu",
+    [switch]$ResetPorts
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,6 +17,15 @@ function Start-DevProcess {
     )
 
     Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -NoNewWindow -PassThru
+}
+
+function Stop-WslFrontendProcess {
+    param(
+        [string]$Distro
+    )
+
+    Write-Host "Stopping any existing WSL frontend process on port 3000..." -ForegroundColor Yellow
+    & wsl.exe -d $Distro -- bash -lc "cd $WslFrontendPath && (pkill -f 'next dev' || true)"
 }
 
 function Invoke-WslFrontend {
@@ -38,6 +48,39 @@ function Stop-DevProcessTree {
                 & taskkill /PID $process.Id /T /F | Out-Null
             } catch {
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+function Stop-PortListeners {
+    param(
+        [int[]]$Ports
+    )
+
+    foreach ($port in $Ports) {
+        $processIds = @(
+            Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty OwningProcess -Unique
+        )
+
+        if ($processIds.Count -eq 0) {
+            Write-Host "Port $port is free." -ForegroundColor DarkGray
+            continue
+        }
+
+        foreach ($processId in $processIds) {
+            if ($null -eq $processId -or $processId -le 0) {
+                continue
+            }
+
+            try {
+                $process = Get-Process -Id $processId -ErrorAction Stop
+                Write-Host "Stopping $($process.ProcessName) (PID $processId) on port $port..." -ForegroundColor Yellow
+                Stop-Process -Id $processId -Force -ErrorAction Stop
+            } catch {
+                Write-Host "Stopping PID $processId on port $port..." -ForegroundColor Yellow
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
             }
         }
     }
@@ -68,6 +111,14 @@ function Wait-DevProcesses {
 $processes = @()
 
 try {
+    if ($ResetPorts.IsPresent) {
+        switch ($Target) {
+            "backend" { Stop-PortListeners -Ports @(8000) }
+            "frontend" { Stop-PortListeners -Ports @(3000) }
+            "all" { Stop-PortListeners -Ports @(3000, 8000) }
+        }
+    }
+
     switch ($Target) {
         "infra" {
             Set-Location $Root
@@ -86,6 +137,7 @@ try {
             Wait-DevProcesses -Processes $processes
         }
         "frontend" {
+            Stop-WslFrontendProcess -Distro $WslDistro
             Write-Host "Frontend listening on http://127.0.0.1:3000 (WSL: $WslDistro)"
             Invoke-WslFrontend -Distro $WslDistro
         }
@@ -109,6 +161,7 @@ try {
             Write-Host "Press Ctrl+C to stop the backend and frontend processes."
 
             try {
+                Stop-WslFrontendProcess -Distro $WslDistro
                 Invoke-WslFrontend -Distro $WslDistro
             } finally {
                 Stop-DevProcessTree -Processes $processes

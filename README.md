@@ -2,7 +2,7 @@
 
 NOVO is an owner-controlled Personal AI Operating System.
 
-This repository is currently in Phase E1: Identity and Control Foundation (in progress).
+Current checkpoint: E2 complete / E3 ready. See [docs/architecture/17_E2_COMPLETE_E3_READY.md](D:/NOVO/docs/architecture/17_E2_COMPLETE_E3_READY.md).
 
 ## Repository areas
 
@@ -33,7 +33,7 @@ Docker Desktop is installed and the core Compose services are available locally.
 5. Run backend and frontend development servers.
 6. Run the quality scripts.
 
-Frontend development now runs through WSL Ubuntu on this Windows machine so Next.js can avoid the local spawn/permission issue we found in the native Windows environment.
+Frontend development and production builds should run through WSL Ubuntu on this Windows machine so Next.js can avoid the local spawn/permission issue we found in the native Windows environment.
 
 Browser sessions use HttpOnly cookies with CSRF protection; bearer headers remain a compatibility path for non-browser clients only.
 

@@ -26,22 +26,59 @@ DEFAULT_PROMPT_KEY = "conversation.reply"
 DEFAULT_MODEL_CATALOG_SEEDS = [
     {
         "provider": "openrouter",
-        "model_key": "openrouter/free/fast",
-        "display_name": "OpenRouter Free Fast",
+        "model_key": "openrouter/free",
+        "display_name": "OpenRouter Free Router",
         "capabilities": {"fast_path": True, "streaming": True, "structured_output": True},
-        "context_window": 8192,
-        "max_output_tokens": 2048,
+        "context_window": 131072,
+        "max_output_tokens": 256,
         "privacy_eligibility": "private",
         "pricing": {"input_minor": 0, "output_minor": 0, "currency": "USD"},
         "enabled": True,
     },
     {
         "provider": "openrouter",
-        "model_key": "openrouter/free/deep",
-        "display_name": "OpenRouter Free Deep",
-        "capabilities": {"fast_path": False, "deep_reasoning": True, "streaming": True},
-        "context_window": 32768,
-        "max_output_tokens": 4096,
+        "model_key": "openai/gpt-oss-120b:free",
+        "display_name": "OpenAI GPT-OSS 120B (free)",
+        "capabilities": {
+            "fast_path": True,
+            "deep_reasoning": True,
+            "streaming": True,
+            "structured_output": True,
+        },
+        "context_window": 131072,
+        "max_output_tokens": 256,
+        "privacy_eligibility": "private",
+        "pricing": {"input_minor": 0, "output_minor": 0, "currency": "USD"},
+        "enabled": True,
+    },
+    {
+        "provider": "openrouter",
+        "model_key": "google/gemma-4-31b-it:free",
+        "display_name": "Google Gemma 4 31B IT (free)",
+        "capabilities": {
+            "fast_path": True,
+            "deep_reasoning": True,
+            "streaming": True,
+            "structured_output": True,
+        },
+        "context_window": 262144,
+        "max_output_tokens": 256,
+        "privacy_eligibility": "private",
+        "pricing": {"input_minor": 0, "output_minor": 0, "currency": "USD"},
+        "enabled": True,
+    },
+    {
+        "provider": "openrouter",
+        "model_key": "poolside/laguna-m1:free",
+        "display_name": "Poolside Laguna M1 (free)",
+        "capabilities": {
+            "fast_path": True,
+            "deep_reasoning": True,
+            "streaming": True,
+            "structured_output": True,
+        },
+        "context_window": 262144,
+        "max_output_tokens": 256,
         "privacy_eligibility": "private",
         "pricing": {"input_minor": 0, "output_minor": 0, "currency": "USD"},
         "enabled": True,
@@ -59,6 +96,13 @@ DEFAULT_MODEL_CATALOG_SEEDS = [
     },
 ]
 
+LEGACY_MODEL_KEY_ALIASES = {
+    "openrouter/fusion": "openrouter/free",
+    "openrouter/free/fast": "openrouter/free",
+    "openrouter/free/deep": "openai/gpt-oss-120b:free",
+    "meta-llama/llama-3.2-3b-instruct:free": "openrouter/free",
+}
+
 DEFAULT_PROMPT_DEFINITION = {
     "prompt_key": DEFAULT_PROMPT_KEY,
     "purpose": "conversation.reply",
@@ -75,7 +119,12 @@ DEFAULT_PROMPT_DEFINITION = {
         "additionalProperties": False,
     },
     "security_level": "private",
-    "content": "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully.",
+    "content": (
+        "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
+        "Write in plain text with short paragraphs. If you use headings, put them on their own line "
+        "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
+        "Avoid dense markdown formatting unless the user explicitly asks for it."
+    ),
 }
 
 
@@ -94,16 +143,40 @@ class RouteSelection:
 
 
 async def ensure_model_registry_seed(db: AsyncSession, owner_id: UUID) -> None:
+    existing_models = list(await db.scalars(select(ModelCatalog)))
+    models_by_key = {model.model_key: model for model in existing_models}
+
+    for legacy_key, real_key in LEGACY_MODEL_KEY_ALIASES.items():
+        legacy_model = models_by_key.get(legacy_key)
+        if legacy_model is None:
+            continue
+        seed = next(seed for seed in DEFAULT_MODEL_CATALOG_SEEDS if seed["model_key"] == real_key)
+        legacy_model.provider = seed["provider"]
+        legacy_model.model_key = seed["model_key"]
+        legacy_model.display_name = seed["display_name"]
+        legacy_model.capabilities = seed["capabilities"]
+        legacy_model.context_window = seed["context_window"]
+        legacy_model.max_output_tokens = seed["max_output_tokens"]
+        legacy_model.privacy_eligibility = seed["privacy_eligibility"]
+        legacy_model.pricing = seed["pricing"]
+        legacy_model.enabled = seed["enabled"]
+
+    await db.flush()
+    models_by_key = {model.model_key: model for model in await db.scalars(select(ModelCatalog))}
+
     for seed in DEFAULT_MODEL_CATALOG_SEEDS:
-        model = await db.scalar(
-            select(ModelCatalog).where(
-                ModelCatalog.provider == seed["provider"],
-                ModelCatalog.model_key == seed["model_key"],
-            )
-        )
+        model = models_by_key.get(seed["model_key"])
         if model is None:
             db.add(ModelCatalog(**seed))
             await db.flush()
+        else:
+            model.display_name = seed["display_name"]
+            model.capabilities = seed["capabilities"]
+            model.context_window = seed["context_window"]
+            model.max_output_tokens = seed["max_output_tokens"]
+            model.privacy_eligibility = seed["privacy_eligibility"]
+            model.pricing = seed["pricing"]
+            model.enabled = seed["enabled"]
 
     policy = await db.scalar(
         select(ModelPolicy).where(
@@ -111,17 +184,24 @@ async def ensure_model_registry_seed(db: AsyncSession, owner_id: UUID) -> None:
             ModelPolicy.name == DEFAULT_MODEL_POLICY_NAME,
         )
     )
+    default_rules = {
+        "route": "fast",
+        "purpose": "conversation.reply",
+        "preferred_model_keys": [
+            "openrouter/free",
+            "openai/gpt-oss-120b:free",
+            "google/gemma-4-31b-it:free",
+            "poolside/laguna-m1:free",
+            "stub/echo",
+        ],
+        "fallback_model_key": "stub/echo",
+        "fallback_allowed": True,
+    }
     if policy is None:
         policy = ModelPolicy(
             owner_id=owner_id,
             name=DEFAULT_MODEL_POLICY_NAME,
-            rules={
-                "route": "fast",
-                "purpose": "conversation.reply",
-                "preferred_model_keys": ["openrouter/free/fast", "stub/echo"],
-                "fallback_model_key": "stub/echo",
-                "fallback_allowed": True,
-            },
+            rules=default_rules,
             max_classification="private",
             max_cost_minor=0,
             currency="USD",
@@ -131,6 +211,31 @@ async def ensure_model_registry_seed(db: AsyncSession, owner_id: UUID) -> None:
         )
         db.add(policy)
         await db.flush()
+    else:
+        rules = dict(policy.rules or {})
+        preferred_keys = [
+            LEGACY_MODEL_KEY_ALIASES.get(str(item), str(item))
+            for item in rules.get("preferred_model_keys", default_rules["preferred_model_keys"])
+            if item
+        ]
+        if not preferred_keys:
+            preferred_keys = default_rules["preferred_model_keys"]
+        fallback_key = LEGACY_MODEL_KEY_ALIASES.get(
+            str(rules.get("fallback_model_key", default_rules["fallback_model_key"])),
+            str(rules.get("fallback_model_key", default_rules["fallback_model_key"])),
+        )
+        normalized_rules = {
+            **rules,
+            "route": rules.get("route", default_rules["route"]),
+            "purpose": rules.get("purpose", default_rules["purpose"]),
+            "preferred_model_keys": preferred_keys,
+            "fallback_model_key": fallback_key,
+            "fallback_allowed": bool(rules.get("fallback_allowed", True)),
+        }
+        if normalized_rules != rules:
+            policy.rules = normalized_rules
+        if not policy.enabled:
+            policy.enabled = True
 
 
 async def ensure_prompt_registry_seed(db: AsyncSession) -> None:
@@ -466,9 +571,13 @@ async def _select_model(
             return bool(model.capabilities.get("deep_reasoning")) or model.context_window >= 16000
         return bool(model.capabilities.get("fast_path", True))
 
-    preferred = [model for model in models if model.model_key in preferred_keys and eligible(model)]
-    if preferred:
-        return preferred[0]
+    for preferred_key in preferred_keys:
+        preferred = next(
+            (model for model in models if model.model_key == preferred_key and eligible(model)),
+            None,
+        )
+        if preferred is not None:
+            return preferred
 
     eligible_models = [model for model in models if eligible(model)]
     if eligible_models:

@@ -1,4 +1,4 @@
-﻿"""Conversation guardrails for the E2 fast path."""
+"""Conversation guardrails for the E2 fast path."""
 
 from __future__ import annotations
 
@@ -52,10 +52,12 @@ def redact_sensitive_text(text: str) -> str:
     return redacted
 
 
-def build_stub_reply(content: str) -> GuardrailResult:
+def build_stub_reply(content: str, *, fallback_reason: str | None = None) -> GuardrailResult:
     findings = inspect_text(content)
     normalized = content.strip().casefold()
-    if normalized in _GREETINGS:
+    if fallback_reason:
+        reply = f"AI model failed. Fallback used. Reason: {fallback_reason}. Please try again."
+    elif normalized in _GREETINGS:
         reply = "Hello. I'm NOVO. I'm here with you."
     elif findings:
         reply = "I can help, but I will not repeat or store sensitive secrets."

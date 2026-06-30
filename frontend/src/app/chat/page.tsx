@@ -1,9 +1,10 @@
 ﻿"use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getApiBase } from "../../lib/api";
 import { getCookieValue } from "../../lib/cookies";
+import { getUserFacingErrorMessage } from "../../lib/user-facing-errors";
 
 type Conversation = {
   id: string;
@@ -32,6 +33,15 @@ type MessageListResponse = {
   items: Message[];
 };
 
+type ToastTone = "info" | "success" | "error";
+
+type Toast = {
+  id: string;
+  tone: ToastTone;
+  title: string;
+  description: string;
+};
+
 type SendMessageResponse = {
   message: Message;
   response_id: string;
@@ -43,6 +53,94 @@ type StreamCompletedEvent = {
   assistant_message: Message;
 };
 
+const CHAT_STORAGE_KEYS = {
+  conversations: "novo.chat.conversations",
+  selectedConversationId: "novo.chat.selectedConversationId",
+  sidebarQuery: "novo.chat.sidebarQuery",
+} as const;
+
+function formatInlineText(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const pattern = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[2]) {
+      parts.push(<strong key={`bold-${match.index}`}>{match[2]}</strong>);
+    } else if (match[3]) {
+      parts.push(<code key={`code-${match.index}`}>{match[3]}</code>);
+    } else if (match[4]) {
+      parts.push(<em key={`italic-${match.index}`}>{match[4]}</em>);
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
+}
+
+function renderMessageContent(content: string): ReactNode[] {
+  const normalized = content.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const lines = normalized.split("\n");
+  const nodes: ReactNode[] = [];
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      nodes.push(<div key={`blank-${index}`} className="message-gap" />);
+      return;
+    }
+
+    const headingMatch = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+    if (headingMatch) {
+      const depth = headingMatch[1].length;
+      const HeadingTag = (depth === 1 ? "h3" : depth === 2 ? "h4" : "h5") as
+        | "h3"
+        | "h4"
+        | "h5";
+      nodes.push(
+        <HeadingTag key={`heading-${index}`} className={`message-heading message-heading-${depth}`}>
+          {formatInlineText(headingMatch[2])}
+        </HeadingTag>,
+      );
+      return;
+    }
+
+    const bulletMatch = /^([-*]|\d+\.)\s+(.+)$/.exec(trimmed);
+    if (bulletMatch) {
+      nodes.push(
+        <div key={`bullet-${index}`} className="message-bullet">
+          <span className="message-bullet-mark">{bulletMatch[1]}</span>
+          <span className="message-bullet-copy">{formatInlineText(bulletMatch[2])}</span>
+        </div>,
+      );
+      return;
+    }
+
+    nodes.push(
+      <p key={`paragraph-${index}`} className="message-paragraph">
+        {formatInlineText(trimmed)}
+      </p>,
+    );
+  });
+
+  return nodes;
+}
+
 export default function ChatPage() {
   const apiBase = useMemo(() => getApiBase(), []);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -50,10 +148,30 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [title, setTitle] = useState("New chat");
+  const [sidebarQuery, setSidebarQuery] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [streamingReply, setStreamingReply] = useState("");
+  const [hydrated, setHydrated] = useState(false);
   const streamRef = useRef<EventSource | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }, []);
+
+  const pushToast = useCallback((toast: Omit<Toast, "id">) => {
+    const id = crypto.randomUUID();
+    setToasts((current) => [...current, { ...toast, id }]);
+    globalThis.setTimeout(() => {
+      removeToast(id);
+    }, 5000);
+  }, [removeToast]);
+
+  const nextConversationTitle = useCallback(
+    (count: number) => `New chat ${count + 1}`,
+    [],
+  );
 
   const authFetch = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -71,16 +189,49 @@ export default function ChatPage() {
     [apiBase],
   );
 
+  const sortedConversations = useMemo(
+    () =>
+      [...conversations].sort(
+        (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+      ),
+    [conversations],
+  );
+
+  const filteredConversations = useMemo(() => {
+    const query = sidebarQuery.trim().toLowerCase();
+    if (!query) {
+      return sortedConversations;
+    }
+
+    return sortedConversations.filter((conversation) => {
+      const haystack = `${conversation.title} ${conversation.status} ${conversation.classification}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [sidebarQuery, sortedConversations]);
+
+  const selectedConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === selectedConversationId) ?? null,
+    [conversations, selectedConversationId],
+  );
+
   const loadConversations = useCallback(async () => {
     const response = await authFetch("/conversations");
     if (!response.ok) {
-      throw new Error(`Failed to load conversations (${response.status})`);
+      const bodyText = await response.text();
+      throw new Error(
+        getUserFacingErrorMessage(response.status, bodyText, `Failed to load conversations (${response.status})`),
+      );
     }
 
     const payload = (await response.json()) as ConversationListResponse;
     setConversations(payload.items);
     if (payload.items.length > 0) {
-      setSelectedConversationId((current) => current ?? payload.items[0].id);
+      setSelectedConversationId((current) => {
+        if (current && payload.items.some((conversation) => conversation.id === current)) {
+          return current;
+        }
+        return payload.items[0].id;
+      });
     }
   }, [authFetch]);
 
@@ -88,7 +239,10 @@ export default function ChatPage() {
     async (conversationId: string) => {
       const response = await authFetch(`/conversations/${conversationId}/messages`);
       if (!response.ok) {
-        throw new Error(`Failed to load messages (${response.status})`);
+        const bodyText = await response.text();
+        throw new Error(
+          getUserFacingErrorMessage(response.status, bodyText, `Failed to load messages (${response.status})`),
+        );
       }
 
       const payload = (await response.json()) as MessageListResponse;
@@ -102,7 +256,7 @@ export default function ChatPage() {
       streamRef.current?.close();
       setStreamingReply("");
 
-      const source = new EventSource(`${apiBase}/responses/${responseId}/events`, {
+      const source = new EventSource(`${apiBase}/conversations/responses/${responseId}/events`, {
         withCredentials: true,
       });
       streamRef.current = source;
@@ -124,19 +278,97 @@ export default function ChatPage() {
 
       source.addEventListener("response.failed", (event) => {
         const payload = JSON.parse((event as MessageEvent).data) as { error_message?: string };
-        setStatus(payload.error_message ?? "NOVO was unable to generate a reply.");
+        const message = payload.error_message ?? "NOVO was unable to generate a reply.";
+        setStatus(message);
         setStreamingReply("");
+        pushToast({ tone: "error", title: "Reply failed", description: message });
         source.close();
         streamRef.current = null;
       });
 
       source.onerror = () => {
+        const message = "The live reply stream disconnected. Please try sending the message again.";
+        setStatus(message);
+        pushToast({ tone: "error", title: "Stream disconnected", description: message });
         source.close();
         streamRef.current = null;
       };
     },
-    [apiBase],
+    [apiBase, pushToast],
   );
+
+  useEffect(() => {
+    try {
+      const cachedConversations = window.localStorage.getItem(CHAT_STORAGE_KEYS.conversations);
+      if (cachedConversations) {
+        setConversations(JSON.parse(cachedConversations) as Conversation[]);
+      }
+    } catch {
+      // Ignore stale cache parsing issues.
+    }
+
+    try {
+      const cachedSelectedConversationId = window.localStorage.getItem(
+        CHAT_STORAGE_KEYS.selectedConversationId,
+      );
+      if (cachedSelectedConversationId) {
+        setSelectedConversationId(cachedSelectedConversationId);
+      }
+    } catch {
+      // Ignore stale cache parsing issues.
+    }
+
+    try {
+      const cachedQuery = window.localStorage.getItem(CHAT_STORAGE_KEYS.sidebarQuery);
+      if (cachedQuery) {
+        setSidebarQuery(cachedQuery);
+      }
+    } catch {
+      // Ignore stale cache parsing issues.
+    }
+
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(CHAT_STORAGE_KEYS.conversations, JSON.stringify(conversations));
+    } catch {
+      // Ignore cache write failures.
+    }
+  }, [conversations, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    try {
+      if (selectedConversationId) {
+        window.localStorage.setItem(CHAT_STORAGE_KEYS.selectedConversationId, selectedConversationId);
+      } else {
+        window.localStorage.removeItem(CHAT_STORAGE_KEYS.selectedConversationId);
+      }
+    } catch {
+      // Ignore cache write failures.
+    }
+  }, [hydrated, selectedConversationId]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(CHAT_STORAGE_KEYS.sidebarQuery, sidebarQuery);
+    } catch {
+      // Ignore cache write failures.
+    }
+  }, [hydrated, sidebarQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +379,9 @@ export default function ChatPage() {
         await loadConversations();
       } catch (error) {
         if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : "Unable to load NOVO chat.");
+          const message = error instanceof Error ? error.message : "Unable to load NOVO chat.";
+          setStatus(message);
+          pushToast({ tone: "error", title: "Could not load chats", description: message });
         }
       } finally {
         if (!cancelled) {
@@ -163,167 +397,178 @@ export default function ChatPage() {
       streamRef.current?.close();
       streamRef.current = null;
     };
-  }, [loadConversations]);
-
-  useEffect(() => {
-    if (!selectedConversationId) {
-      setMessages([]);
-      return;
-    }
-
-    const activeConversationId = selectedConversationId;
-    let cancelled = false;
-
-    async function refreshMessages() {
-      try {
-        await loadMessages(activeConversationId);
-      } catch (error) {
-        if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : "Unable to load conversation messages.");
-        }
-      }
-    }
-
-    void refreshMessages();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadMessages, selectedConversationId]);
-
-  async function handleCreateConversation() {
-    setStatus(null);
-    const response = await authFetch("/conversations", {
-      method: "POST",
-      body: JSON.stringify({ title, classification: "private" }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create conversation (${response.status})`);
-    }
-
-    const conversation = (await response.json()) as Conversation;
-    setConversations((current) => [conversation, ...current]);
-    setSelectedConversationId(conversation.id);
-  }
-
-  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedConversationId || !draft.trim()) {
-      return;
-    }
-
-    setStatus(null);
-    const response = await authFetch(`/conversations/${selectedConversationId}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ content: draft.trim(), role: "user" }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to send message (${response.status})`);
-    }
-
-    const payload = (await response.json()) as SendMessageResponse;
-    setMessages((current) => [...current, payload.message]);
-    setDraft("");
-    startResponseStream(payload.response_id);
-  }
+  }, [loadConversations, pushToast]);
 
   return (
     <main className="chat-shell">
-      <section className="chat-panel">
-        <header className="chat-header">
-          <div>
-            <div className="eyebrow">E2 Conversation Fast Path</div>
-            <h1>Talk to NOVO.</h1>
-            <p className="lead">
-              This is the owner-facing chat surface. It keeps conversations, messages, and the current session in one
-              place.
-            </p>
+      <section className="chat-app">
+        <aside className="chat-sidebar" aria-label="Chat history sidebar">
+          <div className="sidebar-brand">
+            <div className="sidebar-brand-mark" aria-hidden="true">
+              N
+            </div>
+            <div className="sidebar-brand-copy">
+              <strong>NOVO</strong>
+              <span>Owner-first AI OS</span>
+            </div>
           </div>
 
-          <div className="chat-header-actions">
+          <button className="sidebar-new-chat" type="button" onClick={() => void handleCreateConversation()}>
+            <span aria-hidden="true">?</span>
+            <span>New chat</span>
+          </button>
+
+          <label className="sidebar-search" htmlFor="chat-history-search">
+            <span>Search chats</span>
             <input
-              className="chat-title-input"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              aria-label="Conversation title"
+              id="chat-history-search"
+              name="chatHistorySearch"
+              value={sidebarQuery}
+              onChange={(event) => setSidebarQuery(event.target.value)}
+              placeholder="Search chats"
             />
-            <button className="primary-button" type="button" onClick={() => void handleCreateConversation()}>
-              New conversation
-            </button>
-          </div>
-        </header>
+          </label>
 
-        <div className="chat-layout">
-          <aside className="chat-sidebar">
-            <div className="card-label">Conversations</div>
-            {loading ? <p className="card-help">Loading conversations...</p> : null}
-            {conversations.length === 0 && !loading ? (
-              <p className="card-help">No conversations yet. Create the first one.</p>
-            ) : null}
-            <div className="chat-list">
-              {conversations.map((conversation) => (
+          <div className="sidebar-section">
+            <div className="sidebar-section-header">
+              <strong>Recents</strong>
+              <span>{filteredConversations.length}</span>
+            </div>
+
+            <div className="sidebar-conversation-list">
+              {loading && conversations.length === 0 ? <p className="sidebar-empty">Loading chat history...</p> : null}
+              {!loading && filteredConversations.length === 0 ? (
+                <p className="sidebar-empty">No chats match your search.</p>
+              ) : null}
+              {filteredConversations.map((conversation) => (
                 <button
                   key={conversation.id}
                   type="button"
-                  className={`chat-list-item ${conversation.id === selectedConversationId ? "is-selected" : ""}`}
+                  className={`sidebar-conversation ${conversation.id === selectedConversationId ? "is-selected" : ""}`}
                   onClick={() => setSelectedConversationId(conversation.id)}
                 >
-                  <strong>{conversation.title}</strong>
-                  <span>{conversation.status}</span>
+                  <span className="sidebar-conversation-title">{conversation.title}</span>
+                  <span className="sidebar-conversation-meta">
+                    <span>{conversation.status}</span>
+                    <span>{conversation.classification}</span>
+                  </span>
                 </button>
               ))}
             </div>
-          </aside>
+          </div>
 
-          <section className="chat-thread" aria-label="Conversation messages">
+          <div className="sidebar-footer">
+            <div className="sidebar-avatar" aria-hidden="true">
+              JR
+            </div>
+            <div className="sidebar-footer-copy">
+              <strong>NOVO Owner</strong>
+              <span>Chat history is persisted in the database and cached for quick reloads.</span>
+            </div>
+          </div>
+        </aside>
+
+        <main className="chat-main" aria-label="Conversation workspace">
+          <div className="chat-main-shell">
+            <header className="chat-main-header">
+              <div>
+                <div className="eyebrow">E2 Conversation Fast Path</div>
+                <h1>{messages.length === 0 ? "Where should we begin?" : selectedConversation?.title ?? "Conversation"}</h1>
+                <p className="lead">
+                  {selectedConversation
+                    ? `You are viewing "${selectedConversation.title}".`
+                    : "Pick a chat from the sidebar or start a new one."}
+                </p>
+              </div>
+
+              <div className="chat-main-badge">
+                <span>Active chat</span>
+                <strong>{selectedConversation?.status ?? "idle"}</strong>
+              </div>
+            </header>
+
             {messages.length === 0 ? (
-              <div className="chat-empty-state">
-                <strong>No messages yet.</strong>
-                <p>Send the first owner message to start the conversation.</p>
-              </div>
+              <section className="chat-empty-stage" aria-label="Start a chat">
+                <div className="chat-empty-stage-copy">
+                  <h2>Where should we begin?</h2>
+                  <p>Ask NOVO anything. Your recent chats stay in the sidebar.</p>
+                </div>
+              </section>
             ) : (
-              <div className="chat-messages">
-                {messages.map((message) => (
-                  <article key={message.id} className={`chat-message chat-message-${message.role}`}>
-                    <div className="chat-message-meta">
-                      <strong>{message.role}</strong>
-                      <span>#{message.sequence_no}</span>
-                    </div>
-                    <p>{message.content}</p>
-                  </article>
-                ))}
-                {streamingReply ? (
-                  <article className="chat-message chat-message-assistant">
-                    <div className="chat-message-meta">
-                      <strong>assistant</strong>
-                      <span>streaming</span>
-                    </div>
-                    <p>{streamingReply}</p>
-                  </article>
-                ) : null}
-              </div>
+              <section className="chat-thread" aria-label="Conversation messages">
+                <div className="chat-messages">
+                  {messages.map((message) => (
+                    <article key={message.id} className={`chat-message chat-message-${message.role}`}>
+                      <div className="chat-message-meta">
+                        <strong>{message.role}</strong>
+                        <span>#{message.sequence_no}</span>
+                      </div>
+                      {renderMessageContent(message.content)}
+                    </article>
+                  ))}
+                  {streamingReply ? (
+                    <article className="chat-message chat-message-assistant">
+                      <div className="chat-message-meta">
+                        <strong>assistant</strong>
+                        <span>streaming</span>
+                      </div>
+                      {renderMessageContent(streamingReply)}
+                    </article>
+                  ) : null}
+                </div>
+              </section>
             )}
 
             <form className="chat-compose" onSubmit={(event) => void handleSendMessage(event)}>
-              <textarea
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Ask NOVO something..."
-                rows={4}
-              />
-              <button className="primary-button" type="submit" disabled={!selectedConversationId || !draft.trim()}>
-                Send message
-              </button>
+              <div className="chat-compose-shell">
+                <button type="button" className="chat-compose-plus" aria-label="Add attachment">
+                  +
+                </button>
+                <textarea
+                  id="message-draft"
+                  name="messageDraft"
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="Ask NOVO anything"
+                  rows={1}
+                />
+                <div className="chat-compose-tools">
+                  <button type="button" className="chat-mode-pill" aria-label="Mode selector">
+                    Instant
+                  </button>
+                  <button type="button" className="chat-compose-icon" aria-label="Voice input">
+                    Mic
+                  </button>
+                  <button className="chat-send-button" type="submit" disabled={!selectedConversationId || !draft.trim()}>
+                    Send
+                  </button>
+                </div>
+              </div>
             </form>
-          </section>
-        </div>
-
-        {status ? <p className="chat-status">{status}</p> : null}
+          </div>
+        </main>
       </section>
+
+      <div className="chat-toasts" aria-live="polite" aria-relevant="additions">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`toast toast-${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}>
+            <div className="toast-copy">
+              <strong>{toast.title}</strong>
+              <p>{toast.description}</p>
+            </div>
+            <button
+              type="button"
+              className="toast-dismiss"
+              onClick={() => removeToast(toast.id)}
+              aria-label={`Dismiss ${toast.title}`}
+            >
+              x
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {status ? <p className="chat-status">{status}</p> : null}
     </main>
   );
 }
-
-

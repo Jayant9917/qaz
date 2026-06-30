@@ -7,6 +7,8 @@ cd D:\NOVO
 pnpm dev
 ```
 
+This reclaims ports 3000 and 8000 before starting NOVO.
+
 ## Start only one part
 
 Backend only:
@@ -28,6 +30,13 @@ Infrastructure only:
 ```powershell
 cd D:\NOVO
 pnpm dev:infra
+```
+
+## Free ports without starting NOVO
+
+```powershell
+cd D:\NOVO
+pnpm ports:free
 ```
 
 ## Run frontend manually in WSL

@@ -1,5 +1,7 @@
 # E1 Complete / E2 Ready
 
+> Historical checkpoint. This file is kept for audit history only and is superseded by [17_E2_COMPLETE_E3_READY.md](./17_E2_COMPLETE_E3_READY.md).
+
 **Project:** NOVO
 **Phase:** E1 Identity and Control Foundation
 **Status:** Formal checkpoint
