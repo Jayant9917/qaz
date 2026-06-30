@@ -55,3 +55,4 @@ Start with docs/current/CURRENT_WORK.md for the latest live state, then read:
 - docs/foundation/01_PROJECT_VISION.md
 - docs/foundation/04_EXECUTION_ROADMAP.md
 - docs/product/16_DESKTOP_ASSISTANT_ARCHITECTURE.md
+- docs/api/README.md

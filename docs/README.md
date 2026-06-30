@@ -12,6 +12,7 @@ This folder is organized so a junior engineer can understand the repo at a glanc
 - `checkpoints/` - historical phase checkpoint documents
 - `notes/` - exploratory research and architecture notes
 - `diagrams/` - visual companion documents for the normative specs
+- `api/` - public backend HTTP API reference and usage guide
 
 If you want the current state of the project, start here:
 
@@ -27,6 +28,7 @@ If you want the current state of the project, start here:
 - [Security Governance](./capabilities/09_SECURITY_GOVERNANCE.md)
 - [Desktop Assistant Architecture](./product/16_DESKTOP_ASSISTANT_ARCHITECTURE.md)
 - [Current checkpoint](./checkpoints/17_E2_COMPLETE_E3_READY.md)
+- [API documentation](./api/README.md)
 
 Runtime note:
 
