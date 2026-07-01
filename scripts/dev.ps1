@@ -37,6 +37,46 @@ function Get-WslIp {
     return $ip
 }
 
+function Assert-DockerReady {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        throw "Docker is not installed or not on PATH. Start Docker Desktop, then rerun pnpm dev."
+    }
+
+    & docker info | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker Desktop is not running. Start Docker Desktop, then rerun pnpm dev."
+    }
+}
+
+function Invoke-DockerComposeUp {
+    param(
+        [string[]]$Arguments
+    )
+
+    & docker compose @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker Compose failed to start the NOVO core infrastructure. Check Docker Desktop and rerun pnpm dev."
+    }
+}
+
+function Wait-ForPort {
+    param(
+        [string]$HostName,
+        [int]$Port,
+        [int]$TimeoutSeconds = 60
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-NetConnection -ComputerName $HostName -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue) {
+            return
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    throw "Timed out waiting for $Host`:$Port to become available."
+}
+
 function Start-WslLocalhostProxy {
     param(
         [string]$Distro,
@@ -159,7 +199,8 @@ try {
     switch ($Target) {
         "infra" {
             Set-Location $Root
-            docker compose --env-file .env -f infra/compose/docker-compose.core.yml up -d
+            Assert-DockerReady
+            Invoke-DockerComposeUp -Arguments @('--env-file', '.env', '-f', 'infra/compose/docker-compose.core.yml', 'up', '-d')
         }
         "backend" {
             $backend = Start-DevProcess -FilePath "python.exe" -WorkingDirectory (Join-Path $Root "backend") -Arguments @(
@@ -187,8 +228,11 @@ try {
         }
         "all" {
             Set-Location $Root
-            docker compose --env-file .env -f infra/compose/docker-compose.core.yml up -d
+            Assert-DockerReady
+            Invoke-DockerComposeUp -Arguments @('--env-file', '.env', '-f', 'infra/compose/docker-compose.core.yml', 'up', '-d')
             Start-Sleep -Seconds 2
+            Wait-ForPort -HostName '127.0.0.1' -Port 5433 -TimeoutSeconds 60
+            Wait-ForPort -HostName '127.0.0.1' -Port 6379 -TimeoutSeconds 60
 
             $backend = Start-DevProcess -FilePath "python.exe" -WorkingDirectory (Join-Path $Root "backend") -Arguments @(
                 "-m", "uvicorn", "novo.main:app",

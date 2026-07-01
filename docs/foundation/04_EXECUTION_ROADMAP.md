@@ -166,13 +166,16 @@ Deliver:
 
 - Local desktop app shell
 - Text input connected to existing backend chat APIs
-- Assistant status states: idle, listening, thinking, speaking, blocked, degraded
+- Assistant status states: idle, listening, thinking, transcribing, speaking, blocked, degraded
 - Live transcript and response display
 - Basic animation/presence surface
-- Push-to-talk or microphone button placeholder
+- Push-to-talk microphone capture wired to local transcription
 - Speech-to-text adapter boundary
 - Text-to-speech adapter boundary
+- Stop/interruption control for playback and streaming
 - Non-blocking GUI threading model for audio and backend calls
+- Structured voice/backend error reporting with safe user messages and exact terminal tracebacks
+- Safe local settings persistence without secrets
 - Session/bootstrap flow compatible with the backend
 - Safety rule: desktop cannot directly access documents, email, tools, memory, credentials, or model providers
 
@@ -182,6 +185,8 @@ Exit gate:
 - GUI remains responsive while waiting for backend responses.
 - Audio and backend work do not block the main UI thread.
 - Desktop app shows degraded/backend-unavailable state clearly.
+- Desktop/backend error paths keep exact tracebacks in the terminal while presenting safe user-facing messages.
+- Safe local settings persist backend URL, email, and window size without secrets.
 - Existing web Control Center remains available for audit, permissions, settings, and kill switch.
 
 ## 9. Phase E3: Explicit Memory

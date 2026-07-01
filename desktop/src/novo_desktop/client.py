@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import json
 from http.cookiejar import CookieJar
 from typing import Any
+import logging
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import HTTPCookieProcessor, Request, build_opener
@@ -15,6 +16,8 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 class NovoApiError(RuntimeError):
     """Raised when the backend returns an error or cannot be reached."""
 
+
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class SessionInfo:
@@ -122,7 +125,14 @@ class NovoApiClient:
             line = raw_line.decode("utf-8").strip()
             if not line:
                 if data_lines:
-                    yield ResponseEvent(event=event_name, data=json.loads("".join(data_lines)))
+                    try:
+                        yield ResponseEvent(event=event_name, data=json.loads("".join(data_lines)))
+                    except ValueError as exc:
+                        logger.exception(
+                            "NOVO backend stream returned invalid event data",
+                            extra={"response_id": response_id, "event": event_name},
+                        )
+                        raise NovoApiError("Backend returned invalid streamed event data.") from exc
                 event_name = "message"
                 data_lines = []
                 continue
@@ -144,7 +154,14 @@ class NovoApiClient:
         body = response.read().decode("utf-8")
         if not body:
             return {}
-        return json.loads(body)
+        try:
+            return json.loads(body)
+        except ValueError as exc:
+            logger.exception(
+                "NOVO backend returned invalid JSON",
+                extra={"method": method, "path": path, "api_path": api_path},
+            )
+            raise NovoApiError(f"Backend returned invalid JSON from {path}.") from exc
 
     def _open(
         self,
@@ -170,6 +187,19 @@ class NovoApiClient:
             return self.opener.open(request, timeout=60)
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
+            logger.exception(
+                "NOVO API request failed",
+                extra={
+                    "method": method,
+                    "path": path,
+                    "status_code": exc.code,
+                    "detail": detail[:2000],
+                },
+            )
             raise NovoApiError(f"Backend returned {exc.code}: {detail}") from exc
         except URLError as exc:
+            logger.exception(
+                "NOVO backend unreachable",
+                extra={"method": method, "path": path, "reason": str(exc.reason)},
+            )
             raise NovoApiError(f"Could not reach NOVO backend at {self.base_url}: {exc.reason}") from exc

@@ -150,6 +150,22 @@ Selection criteria:
 - Clean backend HTTP/SSE client support
 - Low maintenance burden
 
+## 9.1 Selected E2.5 voice stack
+
+The current NOVO desktop direction is:
+
+- GUI: PySide6
+- Speech-to-text: faster-whisper
+- Text-to-speech: Piper
+- Audio I/O: sounddevice and soundfile
+- Async integration: qasync only if later event-loop integration needs it
+- Default voice profile: Piper `en_US-amy-medium`, a female English voice with a slightly faster speaking rate
+- Voice behavior and personality: controlled by backend prompts and policy, not by the TTS engine
+- Error handling: safe user-facing failures in the GUI, exact tracebacks and log detail in the desktop/backend terminals
+- Local settings: backend URL, email, and window size persist without secrets
+
+This keeps NOVO's sound separate from NOVO's personality. The same voice engine can be reused if the model or style changes later. The current desktop shell already uses this Piper profile for local sample playback, push-to-talk capture, local transcription, interruption control, and safe error reporting; wake word and always-on listening remain later work.
+
 ## 10. Security Rules
 
 - No backend tokens in plaintext config files.

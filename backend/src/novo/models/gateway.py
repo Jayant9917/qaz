@@ -161,6 +161,25 @@ async def _attempt_openrouter_model(
             fallback_reason="openrouter_network_error",
             fallback_detail_safe="Network error while calling OpenRouter.",
         )
+    except Exception:
+        logger.exception(
+            "openrouter_failed",
+            extra={
+                "status_code": None,
+                "model": model.model_key,
+                "fallback_reason": "openrouter_unexpected_error",
+            },
+        )
+        return GatewayReply(
+            safe_text="",
+            findings=[],
+            provider_request_id=None,
+            provider_name=model.provider,
+            model_key=model.model_key,
+            used_fallback=True,
+            fallback_reason="openrouter_unexpected_error",
+            fallback_detail_safe="Unexpected error while calling OpenRouter.",
+        )
 
     provider_request_id = response.headers.get("x-request-id")
     if provider_request_id is not None:
@@ -538,6 +557,32 @@ async def _stream_openrouter_model(
             used_fallback=True,
             fallback_reason=fallback_reason,
             fallback_detail_safe="Network error while calling OpenRouter.",
+        )
+        return
+    except Exception:
+        fallback_reason = "openrouter_unexpected_error"
+        logger.exception(
+            "openrouter_failed",
+            extra={
+                "status_code": None,
+                "model": model.model_key,
+                "provider_request_id": provider_request_id,
+                "fallback_reason": fallback_reason,
+            },
+        )
+        fallback = build_stub_reply(sanitized_user_message, fallback_reason=fallback_reason)
+        for token in fallback.safe_text.split():
+            yield GatewayStreamChunk(token=token)
+        yield GatewayStreamChunk(
+            done=True,
+            safe_text=fallback.safe_text,
+            findings=fallback.findings,
+            provider_request_id=provider_request_id,
+            provider_name="fallback",
+            model_key=model.model_key,
+            used_fallback=True,
+            fallback_reason=fallback_reason,
+            fallback_detail_safe="Unexpected error while streaming from OpenRouter.",
         )
         return
 

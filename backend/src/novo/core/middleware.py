@@ -23,6 +23,16 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         started = perf_counter()
         try:
             response = await call_next(request)
+        except Exception:
+            duration_ms = round((perf_counter() - started) * 1000, 2)
+            logger.exception(
+                "http.request.failed method=%s path=%s duration_ms=%s",
+                request.method,
+                request.url.path,
+                duration_ms,
+            )
+            raise
+        else:
             response.headers["X-Request-ID"] = request_id
             duration_ms = round((perf_counter() - started) * 1000, 2)
             logger.info(

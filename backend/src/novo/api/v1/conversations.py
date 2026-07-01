@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -45,6 +47,8 @@ from novo.models.registry import ModelCatalog
 from novo.models.service import resolve_route_selection
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationCreateRequest(BaseModel):
@@ -434,230 +438,263 @@ async def stream_response_events(
 
     async def event_generator() -> AsyncIterator[str]:
         event_id = 1
-        yield _sse_event(
-            event_id,
-            "response.started",
-            ResponseEventStarted(
-                response_id=response.id,
-                conversation_id=response.conversation_id,
-                user_message_id=response.user_message_id,
-            ),
-        )
-        event_id += 1
-        yield _sse_event(
-            event_id,
-            "response.route_selected",
-            ResponseEventRouteSelected(
-                response_id=response.id,
-                path=response.route,
-                route_reason=response.route_reason,
-                prompt_version=response.prompt_version,
-                model_provider=response.model_provider,
-                model_name=response.model_name,
-            ),
-        )
-        event_id += 1
-
-        user_findings = inspect_text(response.user_message.content)
-        if user_findings:
-            yield _sse_event(
-                event_id,
-                "response.warning",
-                ResponseEventWarning(
-                    response_id=response.id,
-                    warnings=[finding.code for finding in user_findings],
-                ),
-            )
-            event_id += 1
-
-        yield _sse_event(
-            event_id,
-            "response.context_ready",
-            ResponseEventContextReady(
-                response_id=response.id,
-                conversation_id=response.conversation_id,
-                user_message_id=response.user_message_id,
-            ),
-        )
-        event_id += 1
-
-        if response.status == "completed" and response.response_text:
-            assistant_query = await db.execute(
-                select(Message).where(
-                    Message.parent_message_id == response.user_message_id,
-                    Message.role == "assistant",
-                    Message.owner_id == response.owner_id,
-                )
-            )
-            assistant_message_obj = assistant_query.scalar_one_or_none()
-            if assistant_message_obj is None:
+        try:
                 yield _sse_event(
                     event_id,
-                    "response.failed",
-                    ResponseEventFailed(
+                    "response.started",
+                    ResponseEventStarted(
                         response_id=response.id,
-                        error_message="Assistant message missing",
-                    ),
-                )
-                return
-            running_text = []
-            for index, token in enumerate(response.response_text.split(), start=1):
-                running_text.append(token)
-                yield _sse_event(
-                    event_id,
-                    "response.token",
-                    ResponseEventToken(
-                        response_id=response.id,
-                        index=index,
-                        token=token,
-                        content=" ".join(running_text),
+                        conversation_id=response.conversation_id,
+                        user_message_id=response.user_message_id,
                     ),
                 )
                 event_id += 1
-                await asyncio.sleep(0)
-            yield _sse_event(
-                event_id,
-                "response.completed",
-                ResponseEventCompleted(
-                    response_id=response.id,
-                    conversation_id=response.conversation_id,
-                    assistant_message=_message_response(
-                        assistant_message_obj,
+                yield _sse_event(
+                    event_id,
+                    "response.route_selected",
+                    ResponseEventRouteSelected(
                         response_id=response.id,
+                        path=response.route,
+                        route_reason=response.route_reason,
+                        prompt_version=response.prompt_version,
+                        model_provider=response.model_provider,
+                        model_name=response.model_name,
                     ),
-                ),
-            )
-            return
+                )
+                event_id += 1
 
-        model = await get_model_by_key(db, response.model_provider, response.model_name)
-        if model is None:
-            await fail_response_run(
-                db,
-                response=response,
-                error_message="Selected model is not registered",
+                user_findings = inspect_text(response.user_message.content)
+                if user_findings:
+                    yield _sse_event(
+                        event_id,
+                        "response.warning",
+                        ResponseEventWarning(
+                            response_id=response.id,
+                            warnings=[finding.code for finding in user_findings],
+                        ),
+                    )
+                    event_id += 1
+
+                yield _sse_event(
+                    event_id,
+                    "response.context_ready",
+                    ResponseEventContextReady(
+                        response_id=response.id,
+                        conversation_id=response.conversation_id,
+                        user_message_id=response.user_message_id,
+                    ),
+                )
+                event_id += 1
+
+                if response.status == "completed" and response.response_text:
+                    assistant_query = await db.execute(
+                        select(Message).where(
+                            Message.parent_message_id == response.user_message_id,
+                            Message.role == "assistant",
+                            Message.owner_id == response.owner_id,
+                        )
+                    )
+                    assistant_message_obj = assistant_query.scalar_one_or_none()
+                    if assistant_message_obj is None:
+                        yield _sse_event(
+                            event_id,
+                            "response.failed",
+                            ResponseEventFailed(
+                                response_id=response.id,
+                                error_message="Assistant message missing",
+                            ),
+                        )
+                        return
+                    running_text = []
+                    for index, token in enumerate(response.response_text.split(), start=1):
+                        running_text.append(token)
+                        yield _sse_event(
+                            event_id,
+                            "response.token",
+                            ResponseEventToken(
+                                response_id=response.id,
+                                index=index,
+                                token=token,
+                                content=" ".join(running_text),
+                            ),
+                        )
+                        event_id += 1
+                        await asyncio.sleep(0)
+                    yield _sse_event(
+                        event_id,
+                        "response.completed",
+                        ResponseEventCompleted(
+                            response_id=response.id,
+                            conversation_id=response.conversation_id,
+                            assistant_message=_message_response(
+                                assistant_message_obj,
+                                response_id=response.id,
+                            ),
+                        ),
+                    )
+                    return
+
+                model = await get_model_by_key(db, response.model_provider, response.model_name)
+                if model is None:
+                    await fail_response_run(
+                        db,
+                        response=response,
+                        error_message="Selected model is not registered",
+                    )
+                    yield _sse_event(
+                        event_id,
+                        "response.failed",
+                        ResponseEventFailed(
+                            response_id=response.id,
+                            error_message="Selected model is not registered",
+                        ),
+                    )
+                    return
+
+                started_at = perf_counter()
+                prompt_source = f"{response.prompt_version}:{response.user_message.content}"
+                prompt_hash = sha256(prompt_source.encode()).hexdigest()
+                model_call = await create_model_call(
+                    db,
+                    owner_id=response.owner_id,
+                    model=model,
+                    message_id=response.user_message.id,
+                    route_reason=response.route_reason,
+                    classification_max=response.user_message.classification,
+                    prompt_hash=prompt_hash,
+                    input_tokens=len(response.user_message.content.split()),
+                )
+                system_prompt = (
+                    "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
+                    "Write in plain text with short paragraphs. If you use headings, put them on "
+                    "their own line "
+                    "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
+                    "Avoid dense markdown formatting unless the user explicitly asks for it."
+                )
+                running_text_parts: list[str] = []
+                token_index = 0
+                final_chunk = None
+
+                async for chunk in stream_model_reply(
+                    model=model,
+                    user_message=response.user_message.content,
+                    prompt_version=response.prompt_version,
+                    system_prompt=system_prompt,
+                ):
+                    if chunk.token:
+                        token_index += 1
+                        running_text_parts.append(chunk.token)
+                        yield _sse_event(
+                            event_id,
+                            "response.token",
+                            ResponseEventToken(
+                                response_id=response.id,
+                                index=token_index,
+                                token=chunk.token,
+                                content="".join(running_text_parts),
+                            ),
+                        )
+                        event_id += 1
+                        await asyncio.sleep(0)
+                    if chunk.done:
+                        final_chunk = chunk
+
+                if final_chunk is None or not final_chunk.safe_text.strip():
+                    await fail_response_run(db, response=response, error_message="Empty response text")
+                    yield _sse_event(
+                        event_id,
+                        "response.failed",
+                        ResponseEventFailed(response_id=response.id, error_message="Empty response text"),
+                    )
+                    return
+
+                if final_chunk.provider_request_id is not None:
+                    model_call.provider_request_id = final_chunk.provider_request_id
+
+                assistant_message = await create_message(
+                    db,
+                    owner_id=response.owner_id,
+                    conversation=response.conversation,
+                    role="assistant",
+                    content=final_chunk.safe_text,
+                    content_format="text/plain",
+                    classification=response.user_message.classification,
+                    parent_message_id=response.user_message.id,
+                )
+                assistant_message.model_call_id = model_call.id
+                metadata: dict[str, object] = {}
+                if final_chunk.findings:
+                    metadata["guardrail_warnings"] = [finding.code for finding in final_chunk.findings]
+                if final_chunk.used_fallback and final_chunk.fallback_reason:
+                    metadata["fallback_used"] = True
+                    metadata["fallback_reason"] = final_chunk.fallback_reason
+                    if final_chunk.fallback_detail_safe:
+                        metadata["fallback_detail_safe"] = final_chunk.fallback_detail_safe
+                    metadata["attempts"] = final_chunk.attempts
+                if metadata:
+                    assistant_message.metadata_json = metadata
+                latency_ms = int((perf_counter() - started_at) * 1000)
+                await complete_model_call(
+                    db,
+                    call=model_call,
+                    response_text=final_chunk.safe_text,
+                    output_tokens=len(final_chunk.safe_text.split()),
+                    latency_ms=latency_ms,
+                    warning_code=(
+                        final_chunk.fallback_reason if final_chunk.used_fallback else None
+                    ),
+                    warning_detail_safe=(
+                        final_chunk.fallback_detail_safe if final_chunk.used_fallback else None
+                    ),
+                )
+                await complete_response_run(
+                    db,
+                    response=response,
+                    response_text=final_chunk.safe_text,
+                    assistant_message=assistant_message,
+                    latency_ms=latency_ms,
+                )
+                yield _sse_event(
+                    event_id,
+                    "response.completed",
+                    ResponseEventCompleted(
+                        response_id=response.id,
+                        conversation_id=response.conversation_id,
+                        assistant_message=_message_response(assistant_message, response_id=response.id),
+                    ),
+                )
+        except Exception:
+            logger.exception(
+                "NOVO conversation response streaming failed",
+                extra={
+                    "response_id": str(response.id),
+                    "conversation_id": str(response.conversation_id),
+                    "user_message_id": str(response.user_message_id),
+                },
             )
+            try:
+                await db.rollback()
+                await fail_response_run(
+                    db,
+                    response=response,
+                    error_message="NOVO backend error while generating the reply",
+                )
+            except Exception:
+                logger.exception(
+                    "NOVO failed to persist response failure",
+                    extra={
+                        "response_id": str(response.id),
+                        "conversation_id": str(response.conversation_id),
+                    },
+                )
             yield _sse_event(
                 event_id,
                 "response.failed",
                 ResponseEventFailed(
                     response_id=response.id,
-                    error_message="Selected model is not registered",
+                    error_message="NOVO hit a backend error while generating the reply. Check the backend terminal for details.",
                 ),
             )
-            return
-
-        started_at = perf_counter()
-        prompt_source = f"{response.prompt_version}:{response.user_message.content}"
-        prompt_hash = sha256(prompt_source.encode()).hexdigest()
-        model_call = await create_model_call(
-            db,
-            owner_id=response.owner_id,
-            model=model,
-            message_id=response.user_message.id,
-            route_reason=response.route_reason,
-            classification_max=response.user_message.classification,
-            prompt_hash=prompt_hash,
-            input_tokens=len(response.user_message.content.split()),
-        )
-        system_prompt = (
-            "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
-            "Write in plain text with short paragraphs. If you use headings, put them on "
-            "their own line "
-            "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
-            "Avoid dense markdown formatting unless the user explicitly asks for it."
-        )
-        running_text_parts: list[str] = []
-        token_index = 0
-        final_chunk = None
-
-        async for chunk in stream_model_reply(
-            model=model,
-            user_message=response.user_message.content,
-            prompt_version=response.prompt_version,
-            system_prompt=system_prompt,
-        ):
-            if chunk.token:
-                token_index += 1
-                running_text_parts.append(chunk.token)
-                yield _sse_event(
-                    event_id,
-                    "response.token",
-                    ResponseEventToken(
-                        response_id=response.id,
-                        index=token_index,
-                        token=chunk.token,
-                        content="".join(running_text_parts),
-                    ),
-                )
-                event_id += 1
-                await asyncio.sleep(0)
-            if chunk.done:
-                final_chunk = chunk
-
-        if final_chunk is None or not final_chunk.safe_text.strip():
-            await fail_response_run(db, response=response, error_message="Empty response text")
-            yield _sse_event(
-                event_id,
-                "response.failed",
-                ResponseEventFailed(response_id=response.id, error_message="Empty response text"),
-            )
-            return
-
-        if final_chunk.provider_request_id is not None:
-            model_call.provider_request_id = final_chunk.provider_request_id
-
-        assistant_message = await create_message(
-            db,
-            owner_id=response.owner_id,
-            conversation=response.conversation,
-            role="assistant",
-            content=final_chunk.safe_text,
-            content_format="text/plain",
-            classification=response.user_message.classification,
-            parent_message_id=response.user_message.id,
-        )
-        assistant_message.model_call_id = model_call.id
-        metadata: dict[str, object] = {}
-        if final_chunk.findings:
-            metadata["guardrail_warnings"] = [finding.code for finding in final_chunk.findings]
-        if final_chunk.used_fallback and final_chunk.fallback_reason:
-            metadata["fallback_used"] = True
-            metadata["fallback_reason"] = final_chunk.fallback_reason
-            if final_chunk.fallback_detail_safe:
-                metadata["fallback_detail_safe"] = final_chunk.fallback_detail_safe
-            metadata["attempts"] = final_chunk.attempts
-        if metadata:
-            assistant_message.metadata_json = metadata
-        latency_ms = int((perf_counter() - started_at) * 1000)
-        await complete_model_call(
-            db,
-            call=model_call,
-            response_text=final_chunk.safe_text,
-            output_tokens=len(final_chunk.safe_text.split()),
-            latency_ms=latency_ms,
-            warning_code=(
-                final_chunk.fallback_reason if final_chunk.used_fallback else None
-            ),
-            warning_detail_safe=(
-                final_chunk.fallback_detail_safe if final_chunk.used_fallback else None
-            ),
-        )
-        await complete_response_run(
-            db,
-            response=response,
-            response_text=final_chunk.safe_text,
-            assistant_message=assistant_message,
-            latency_ms=latency_ms,
-        )
-        yield _sse_event(
-            event_id,
-            "response.completed",
-            ResponseEventCompleted(
-                response_id=response.id,
-                conversation_id=response.conversation_id,
-                assistant_message=_message_response(assistant_message, response_id=response.id),
-            ),
-        )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

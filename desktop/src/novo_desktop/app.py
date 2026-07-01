@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 from queue import Empty, Queue
 import threading
 import tkinter as tk
@@ -10,9 +11,15 @@ from tkinter import messagebox, ttk
 import webbrowser
 
 from .client import NovoApiClient, NovoApiError, ResponseEvent
+from .voice import voice_summary
 
 CONTROL_CENTER_URL = "http://localhost:3000"
 DEFAULT_BACKEND_URL = "http://localhost:8000"
+
+
+def _desktop_session_title() -> str:
+    timestamp = datetime.now()
+    return f"Desktop session {timestamp.strftime('%Y-%m-%d %H:%M:%S')}.{timestamp.microsecond // 1000:03d}"
 
 
 class NovoDesktopApp(tk.Tk):
@@ -97,7 +104,7 @@ class NovoDesktopApp(tk.Tk):
         )
         self.voice_hint = ttk.Label(
             left,
-            text="Push-to-talk placeholder. Audio capture and speech output come next in E2.5.",
+            text=f"NOVO voice: {voice_summary()}. The PySide shell already speaks with Piper; audio capture comes next in E2.5.",
             style="MutedPanel.TLabel",
             wraplength=230,
         )
@@ -202,7 +209,7 @@ class NovoDesktopApp(tk.Tk):
         if not self.client.csrf_token:
             messagebox.showinfo("NOVO", "Sign in before creating a conversation.")
             return
-        title = f"Desktop session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        title = _desktop_session_title()
         self._set_state("Thinking")
         self._run_worker("new_conversation", lambda: self.queue.put(("conversation_ok", self.client.create_conversation(title))))
 
@@ -221,7 +228,7 @@ class NovoDesktopApp(tk.Tk):
     def _send_and_stream(self, content: str) -> None:
         if self.conversation_id is None:
             conversation = self.client.create_conversation(
-                f"Desktop session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                _desktop_session_title()
             )
             self.conversation_id = conversation.id
             self.queue.put(("conversation_ok", conversation))
@@ -357,7 +364,7 @@ class NovoDesktopApp(tk.Tk):
 
     def _voice_placeholder(self) -> None:
         self._set_state("Listening")
-        self._append_system("Voice capture placeholder reached. Next E2.5 slice wires microphone STT.")
+        self._append_system(f"Voice profile set to {voice_summary()}. The PySide shell already speaks with Piper; microphone capture comes next.")
         self.after(900, lambda: self._set_state("Idle"))
 
     def _stop_placeholder(self) -> None:
@@ -369,5 +376,6 @@ class NovoDesktopApp(tk.Tk):
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = NovoDesktopApp()
     app.mainloop()

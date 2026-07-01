@@ -6,7 +6,7 @@ When the project changes, update this file first so the current state stays easy
 
 ## Current checkpoint
 
-- E2 complete / E3 ready
+- E2.5 complete / E3 next
 
 ## What this file is for
 
@@ -26,9 +26,13 @@ If a detail becomes historical, move it into the relevant folder under `docs/` i
 ## Current status snapshot
 
 - E2 is complete.
-- The next engineering phase is E3: explicit memory.
+- The current engineering phase is E2.5: Desktop Assistant Shell and Voice Prototype.
+- The next major backend phase after E2.5 is E3: explicit memory.
 - The docs have been reorganized into purpose-based folders, and this file is the single living work log.
 - The new API documentation lives under `docs/api/`.
+- The desktop GUI now acts as the primary NOVO face for chat, status, and voice work.
+- The selected NOVO desktop voice stack is Piper TTS with the female English `en_US-amy-medium` profile, paired with faster-whisper for STT. The desktop shell can synthesize and play Piper voice output, capture microphone input with push-to-talk, transcribe it locally, and stop playback or streaming on request. The Piper rate is tuned a bit faster than the default. Voice and backend failures now emit exact traces to the desktop/backend terminals while the UI shows safe messages.
+- Local desktop settings persist safe values such as backend URL, email, and window size without storing secrets.
 
 ## What was completed in E2
 
@@ -41,6 +45,7 @@ If a detail becomes historical, move it into the relevant folder under `docs/` i
 - Input and output guardrails
 - Token, latency, and cost accounting
 - Conversation UI and history in the frontend
+- Desktop GUI shell with backend login, live status, chat streaming, refresh health checks, Enter-to-send, Shift+Enter newline behavior, and smoother scroll handling
 
 ## What comes next
 
@@ -49,3 +54,4 @@ If a detail becomes historical, move it into the relevant folder under `docs/` i
 - memory records, revisions, sources, and tags
 - memory guardrails and memory center
 - correction, archive, classification, deletion, and provenance
+- later voice enhancements such as wake word and always-on listening

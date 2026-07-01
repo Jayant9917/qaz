@@ -1,6 +1,6 @@
 # NOVO Desktop Assistant
 
-E2.5 desktop shell for NOVO. This is the local daily-use assistant surface. The current UI is a PySide6 modern assistant console with glass panels, animated orb, chat bubbles, live status, and streaming response display. The existing Next.js app remains the Control Center for governance, permissions, audit, settings, and recovery.
+E2.5 desktop shell for NOVO. This is the local daily-use assistant surface. The current UI is a PySide6 modern assistant console with glass panels, animated orb, chat bubbles, live status, and streaming response display. The selected NOVO voice profile is Piper with the female English model `en_US-amy-medium`, tuned to speak a little faster, and the desktop shell can already synthesize and play sample voice output. Voice, backend, and streaming failures now log the exact exception and traceback to the terminal while the UI shows a safe NOVO-facing message. The existing Next.js app remains the Control Center for governance, permissions, audit, settings, and recovery.
 
 ## What exists now
 
@@ -11,7 +11,11 @@ E2.5 desktop shell for NOVO. This is the local daily-use assistant surface. The 
 - New conversation creation through the governed backend.
 - Text message send through the existing E2 conversation API.
 - SSE response stream display in the desktop transcript.
-- Voice/push-to-talk placeholders with pulsing microphone UI for the next E2.5 slice.
+- Real push-to-talk microphone capture with local transcription.
+- Sample voice playback through Piper in the Qt desktop shell.
+- Stop/interruption control for voice playback and assistant response streaming.
+- Voice and backend request errors log the exact exception and traceback to the desktop terminal while the UI shows a safe user message.
+- Safe local desktop settings persist backend URL, email, and window size without storing secrets.
 - Control Center launcher for the web dashboard.
 
 ## Run
@@ -32,13 +36,12 @@ python desktop\run.py
 
 The desktop app is a client. It must not bypass backend permissions, audit, memory, RAG, tools, credentials, model routing, or kill switch behavior.
 
-## Next E2.5 slice
+## Next voice work
 
-- Add real push-to-talk capture.
-- Add speech-to-text adapter interface.
-- Add text-to-speech adapter interface.
-- Add cancellable streaming.
-- Add persisted local desktop settings without storing secrets.
+- Add wake word and always-on listening after the security/privacy model is ready.
+- Add richer microphone error recovery and retry UI.
+- Add optional voice profile selection UI.
+- Add more nuanced interruption controls for multi-stage voice sessions.
 ## UI dependencies
 
 The modern desktop shell uses:
@@ -47,6 +50,11 @@ The modern desktop shell uses:
 - Pillow
 - psutil
 - qtawesome and markdown are installed for upcoming icon/markdown rendering improvements
+- Piper is the selected text-to-speech engine for NOVO voice
+- NOVO's Piper speech rate is tuned to be a little faster than the default
+- faster-whisper is the selected speech-to-text engine for the next voice slice
+- sounddevice and soundfile are the audio I/O layer
+- pyttsx3 is available as a Windows fallback voice engine if needed
 
 If the GUI packages are missing, install them with:
 
