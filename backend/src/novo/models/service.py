@@ -22,6 +22,20 @@ from novo.models.registry import (
 
 DEFAULT_MODEL_POLICY_NAME = "conversation.fast-path.default"
 DEFAULT_PROMPT_KEY = "conversation.reply"
+DEFAULT_PREFERRED_MODEL_KEYS = [
+    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "poolside/laguna-m1:free",
+    "openrouter/free",
+    "stub/echo",
+]
+LEGACY_DEFAULT_PREFERRED_MODEL_KEYS = [
+    "openrouter/free",
+    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "poolside/laguna-m1:free",
+    "stub/echo",
+]
 
 DEFAULT_MODEL_CATALOG_SEEDS = [
     {
@@ -188,13 +202,7 @@ async def ensure_model_registry_seed(db: AsyncSession, owner_id: UUID) -> None:
     default_rules = {
         "route": "fast",
         "purpose": "conversation.reply",
-        "preferred_model_keys": [
-            "openrouter/free",
-            "openai/gpt-oss-120b:free",
-            "google/gemma-4-31b-it:free",
-            "poolside/laguna-m1:free",
-            "stub/echo",
-        ],
+        "preferred_model_keys": DEFAULT_PREFERRED_MODEL_KEYS,
         "fallback_model_key": "stub/echo",
         "fallback_allowed": True,
     }
@@ -220,6 +228,8 @@ async def ensure_model_registry_seed(db: AsyncSession, owner_id: UUID) -> None:
             if item
         ]
         if not preferred_keys:
+            preferred_keys = default_rules["preferred_model_keys"]
+        if preferred_keys == LEGACY_DEFAULT_PREFERRED_MODEL_KEYS:
             preferred_keys = default_rules["preferred_model_keys"]
         fallback_key = LEGACY_MODEL_KEY_ALIASES.get(
             str(rules.get("fallback_model_key", default_rules["fallback_model_key"])),
