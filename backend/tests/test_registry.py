@@ -79,3 +79,55 @@ def test_route_simulation_uses_registry_selection(client: TestClient) -> None:
     assert body["prompt_version"].startswith("conversation.reply.v")
     assert body["model_provider"] in {"openrouter", "stub"}
     assert body["model_name"]
+
+
+
+def test_route_simulation_refreshes_after_model_updates(client: TestClient) -> None:
+    tokens = bootstrap_owner(client)
+    headers = auth_headers(tokens)
+
+    first = client.post(
+        "/api/v1/models/route-simulation",
+        headers=headers,
+        json={"purpose": "conversation.reply", "classification": "private", "route_mode": "fast"},
+    )
+    assert first.status_code == 200
+    first_body = first.json()
+
+    models = client.get("/api/v1/models", headers=headers)
+    assert models.status_code == 200
+    selected_model = next(
+        item
+        for item in models.json()["items"]
+        if item["provider"] == first_body["model_provider"]
+        and item["model_key"] == first_body["model_name"]
+    )
+
+    try:
+        disabled = client.patch(
+            f"/api/v1/models/{selected_model['id']}",
+            headers=headers,
+            json={"enabled": False},
+        )
+        assert disabled.status_code == 200
+
+        second = client.post(
+            "/api/v1/models/route-simulation",
+            headers=headers,
+            json={"purpose": "conversation.reply", "classification": "private", "route_mode": "fast"},
+        )
+        assert second.status_code == 200
+        second_body = second.json()
+        assert (
+            second_body["model_provider"],
+            second_body["model_name"],
+        ) != (
+            first_body["model_provider"],
+            first_body["model_name"],
+        )
+    finally:
+        client.patch(
+            f"/api/v1/models/{selected_model['id']}",
+            headers=headers,
+            json={"enabled": True},
+        )

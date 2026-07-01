@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+from time import monotonic
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +24,10 @@ from novo.models.registry import (
 
 DEFAULT_MODEL_POLICY_NAME = "conversation.fast-path.default"
 DEFAULT_PROMPT_KEY = "conversation.reply"
+DEFAULT_ASSISTANT_SYSTEM_PROMPT = (
+    "You are NOVO, the owner-first AI OS. Be calm, direct, and helpful. "
+    "Use plain text and short paragraphs. Stay concise unless the user asks for more detail."
+)
 DEFAULT_PREFERRED_MODEL_KEYS = [
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
@@ -133,13 +139,7 @@ DEFAULT_PROMPT_DEFINITION = {
         "additionalProperties": False,
     },
     "security_level": "private",
-    "content": (
-        "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
-        "Write in plain text with short paragraphs. If you use headings, put them on "
-        "their own line "
-        "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
-        "Avoid dense markdown formatting unless the user explicitly asks for it."
-    ),
+    "content": DEFAULT_ASSISTANT_SYSTEM_PROMPT,
 }
 
 
@@ -155,6 +155,35 @@ class RouteSelection:
     model_policy_id: UUID | None = None
     prompt_template_id: UUID | None = None
     prompt_version_id: UUID | None = None
+
+
+_ROUTE_SELECTION_CACHE_VERSION = 0
+ROUTE_SELECTION_CACHE_TTL_SECONDS = 30.0
+
+
+@dataclass(slots=True)
+class _CachedRouteSelection:
+    selection: RouteSelection
+    expires_at: float
+
+
+_ROUTE_SELECTION_CACHE: dict[tuple[Any, ...], _CachedRouteSelection] = {}
+_ROUTE_SELECTION_CACHE_LOCK: asyncio.Lock | None = None
+
+
+def _route_selection_cache_lock() -> asyncio.Lock:
+    global _ROUTE_SELECTION_CACHE_LOCK
+    if _ROUTE_SELECTION_CACHE_LOCK is None:
+        _ROUTE_SELECTION_CACHE_LOCK = asyncio.Lock()
+    return _ROUTE_SELECTION_CACHE_LOCK
+
+
+def invalidate_registry_cache() -> None:
+    """Clear cached registry selections after any registry write."""
+
+    global _ROUTE_SELECTION_CACHE_VERSION
+    _ROUTE_SELECTION_CACHE_VERSION += 1
+    _ROUTE_SELECTION_CACHE.clear()
 
 
 async def ensure_model_registry_seed(db: AsyncSession, owner_id: UUID) -> None:
@@ -620,35 +649,63 @@ async def resolve_route_selection(
     route_mode: str = "fast",
     model_policy_id: UUID | None = None,
 ) -> RouteSelection:
-    policy = await _resolve_model_policy(db, owner_id=owner_id, policy_id=model_policy_id)
-    template, version, binding = await _resolve_prompt_version(
-        db, owner_id=owner_id, purpose=purpose
+    cache_key = (
+        _ROUTE_SELECTION_CACHE_VERSION,
+        owner_id,
+        classification,
+        purpose,
+        route_mode,
+        model_policy_id,
     )
-    model = await _select_model(
-        db, policy=policy, classification=classification, route_mode=route_mode
-    )
-    reason_parts = [
-        f"purpose={purpose}",
-        f"path={route_mode}",
-        f"prompt={template.prompt_key}.v{version.version_no}",
-        f"model={model.provider}/{model.model_key}",
-    ]
-    if policy is not None:
-        reason_parts.insert(1, f"policy={policy.name}")
-    if binding is not None:
-        reason_parts.append(f"binding={binding.id}")
-    return RouteSelection(
-        path=route_mode,
-        route_reason="; ".join(reason_parts),
-        prompt_version=f"{template.prompt_key}.v{version.version_no}",
-        model_provider=model.provider,
-        model_name=model.model_key,
-        model_id=model.id,
-        prompt_binding_id=binding.id if binding is not None else None,
-        model_policy_id=policy.id if policy is not None else None,
-        prompt_template_id=template.id,
-        prompt_version_id=version.id,
-    )
+    now = monotonic()
+    cached = _ROUTE_SELECTION_CACHE.get(cache_key)
+    if cached is not None:
+        if cached.expires_at > now:
+            return cached.selection
+        _ROUTE_SELECTION_CACHE.pop(cache_key, None)
+
+    async with _route_selection_cache_lock():
+        now = monotonic()
+        cached = _ROUTE_SELECTION_CACHE.get(cache_key)
+        if cached is not None:
+            if cached.expires_at > now:
+                return cached.selection
+            _ROUTE_SELECTION_CACHE.pop(cache_key, None)
+
+        policy = await _resolve_model_policy(db, owner_id=owner_id, policy_id=model_policy_id)
+        template, version, binding = await _resolve_prompt_version(
+            db, owner_id=owner_id, purpose=purpose
+        )
+        model = await _select_model(
+            db, policy=policy, classification=classification, route_mode=route_mode
+        )
+        reason_parts = [
+            f"purpose={purpose}",
+            f"path={route_mode}",
+            f"prompt={template.prompt_key}.v{version.version_no}",
+            f"model={model.provider}/{model.model_key}",
+        ]
+        if policy is not None:
+            reason_parts.insert(1, f"policy={policy.name}")
+        if binding is not None:
+            reason_parts.append(f"binding={binding.id}")
+        selection = RouteSelection(
+            path=route_mode,
+            route_reason="; ".join(reason_parts),
+            prompt_version=f"{template.prompt_key}.v{version.version_no}",
+            model_provider=model.provider,
+            model_name=model.model_key,
+            model_id=model.id,
+            prompt_binding_id=binding.id if binding is not None else None,
+            model_policy_id=policy.id if policy is not None else None,
+            prompt_template_id=template.id,
+            prompt_version_id=version.id,
+        )
+        _ROUTE_SELECTION_CACHE[cache_key] = _CachedRouteSelection(
+            selection=selection,
+            expires_at=monotonic() + ROUTE_SELECTION_CACHE_TTL_SECONDS,
+        )
+        return selection
 
 
 async def list_model_usage(db: AsyncSession) -> list[dict[str, object]]:

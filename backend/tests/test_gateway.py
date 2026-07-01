@@ -91,63 +91,7 @@ async def test_openrouter_gateway_retries_before_fallback(monkeypatch: pytest.Mo
     monkeypatch.setenv("NOVO_OPENROUTER_API_KEY", "test-key")
     get_settings.cache_clear()
 
-    class FakeResponse:
-        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
-            self._payload = payload
-            self.status_code = status_code
-            self.headers = {"x-request-id": f"req-{status_code}"}
-            self.text = json.dumps(payload)
-
-        @property
-        def is_success(self) -> bool:
-            return 200 <= self.status_code < 300
-
-        def json(self) -> dict[str, object]:
-            return self._payload
-
-    class FakeAsyncClient:
-        attempts = 0
-
-        def __init__(self, timeout: float) -> None:
-            self.timeout = timeout
-
-        async def __aenter__(self) -> FakeAsyncClient:
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> bool:
-            return False
-
-        async def post(self, url, headers, json):
-            FakeAsyncClient.attempts += 1
-            if FakeAsyncClient.attempts == 1:
-                return FakeResponse(
-                    {
-                        "choices": [
-                            {
-                                "finish_reason": "stop",
-                                "message": {"content": ""},
-                            }
-                        ],
-                        "usage": {"prompt_tokens": 10, "completion_tokens": 0},
-                    },
-                    status_code=200,
-                )
-            return FakeResponse(
-                {
-                    "choices": [
-                        {
-                            "finish_reason": "stop",
-                            "message": {"content": "Hello from retry."},
-                        }
-                    ],
-                    "usage": {"prompt_tokens": 10, "completion_tokens": 4},
-                },
-                status_code=200,
-            )
-
-    monkeypatch.setattr(gateway.httpx, "AsyncClient", FakeAsyncClient)
-
-    model = ModelCatalog(
+    primary_model = ModelCatalog(
         id=uuid4(),
         provider="openrouter",
         model_key="openrouter/free",
@@ -172,8 +116,37 @@ async def test_openrouter_gateway_retries_before_fallback(monkeypatch: pytest.Mo
         enabled=True,
     )
 
+    async def fake_stream_model_reply(*, model, user_message, prompt_version, system_prompt):
+        if model.model_key == primary_model.model_key:
+            yield gateway.GatewayStreamChunk(token="Retry")
+            yield gateway.GatewayStreamChunk(
+                done=True,
+                safe_text="",
+                findings=[],
+                provider_request_id="req-primary",
+                provider_name=model.provider,
+                model_key=model.model_key,
+                used_fallback=True,
+                fallback_reason="openrouter_timeout",
+                fallback_detail_safe="Request timed out before OpenRouter responded.",
+            )
+            return
+
+        yield gateway.GatewayStreamChunk(token="Hello")
+        yield gateway.GatewayStreamChunk(
+            done=True,
+            safe_text="Hello from retry.",
+            findings=[],
+            provider_request_id="req-fallback",
+            provider_name=model.provider,
+            model_key=model.model_key,
+            used_fallback=False,
+        )
+
+    monkeypatch.setattr(gateway, "stream_model_reply", fake_stream_model_reply)
+
     reply = await generate_model_reply(
-        model=model,
+        model=primary_model,
         fallback_models=[fallback_model],
         user_message="Tell me something useful.",
         prompt_version="conversation.reply.v1",
@@ -186,6 +159,6 @@ async def test_openrouter_gateway_retries_before_fallback(monkeypatch: pytest.Mo
     assert reply.used_fallback is False
     assert reply.safe_text == "Hello from retry."
     assert reply.provider_name == "openrouter"
-    assert reply.model_key == "openai/gpt-oss-120b:free"
+    assert reply.model_key == fallback_model.model_key
     assert reply.attempts == 1
     get_settings.cache_clear()

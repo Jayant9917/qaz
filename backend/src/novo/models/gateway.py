@@ -95,7 +95,7 @@ async def _attempt_openrouter_model(
     system_prompt: str,
     timeout_seconds: float,
 ) -> GatewayReply:
-    system_message = f"{system_prompt}\nPrompt version: {prompt_version}"
+    system_message = system_prompt
     request_payload = {
         "model": model.model_key,
         "messages": [
@@ -366,7 +366,7 @@ async def generate_model_reply(
     fallback_models: Sequence[ModelCatalog] | None = None,
 ) -> GatewayReply:
     settings = get_settings()
-    sanitized_user_message = redact_sensitive_text(user_message)
+
 
     if model.provider != "openrouter" or not settings.openrouter_api_key:
         fallback = build_stub_reply(user_message, fallback_reason="missing_api_key")
@@ -389,26 +389,35 @@ async def generate_model_reply(
     for attempt_index, candidate in enumerate(candidates, start=1):
         if candidate.provider != "openrouter":
             continue
-        attempt = await _attempt_openrouter_model(
+
+        final_chunk: GatewayStreamChunk | None = None
+        async for chunk in stream_model_reply(
             model=candidate,
-            sanitized_user_message=sanitized_user_message,
+            user_message=user_message,
             prompt_version=prompt_version,
             system_prompt=system_prompt,
-            timeout_seconds=settings.openrouter_timeout_seconds,
-        )
-        if not attempt.used_fallback:
+        ):
+            if chunk.done:
+                final_chunk = chunk
+
+        if final_chunk is not None and final_chunk.safe_text.strip() and not final_chunk.used_fallback:
             return GatewayReply(
-                safe_text=attempt.safe_text,
-                findings=attempt.findings,
-                provider_request_id=attempt.provider_request_id,
-                provider_name=attempt.provider_name,
-                model_key=attempt.model_key,
+                safe_text=final_chunk.safe_text,
+                findings=final_chunk.findings or [],
+                provider_request_id=final_chunk.provider_request_id,
+                provider_name=final_chunk.provider_name,
+                model_key=final_chunk.model_key,
                 used_fallback=False,
-                finish_reason=attempt.finish_reason,
+                fallback_reason=final_chunk.fallback_reason,
+                fallback_detail_safe=final_chunk.fallback_detail_safe,
+                attempts=final_chunk.attempts,
+                finish_reason=final_chunk.finish_reason,
             )
-        last_reason = attempt.fallback_reason or last_reason
-        last_detail = attempt.fallback_detail_safe or last_detail
-        last_provider_request_id = attempt.provider_request_id or last_provider_request_id
+
+        if final_chunk is not None:
+            last_reason = final_chunk.fallback_reason or last_reason
+            last_detail = final_chunk.fallback_detail_safe or last_detail
+            last_provider_request_id = final_chunk.provider_request_id or last_provider_request_id
         if attempt_index < len(candidates):
             logger.warning(
                 "openrouter_retrying",
@@ -440,7 +449,7 @@ async def _stream_openrouter_model(
     system_prompt: str,
     timeout_seconds: float,
 ) -> AsyncIterator[GatewayStreamChunk]:
-    system_message = f"{system_prompt}\nPrompt version: {prompt_version}"
+    system_message = system_prompt
     request_payload = {
         "model": model.model_key,
         "messages": [
@@ -648,7 +657,6 @@ async def stream_model_reply(
 ) -> AsyncIterator[GatewayStreamChunk]:
     settings = get_settings()
     sanitized_user_message = redact_sensitive_text(user_message)
-
     if model.provider != "openrouter" or not settings.openrouter_api_key:
         fallback = build_stub_reply(user_message, fallback_reason="missing_api_key")
         for token in fallback.safe_text.split():
@@ -674,3 +682,10 @@ async def stream_model_reply(
         timeout_seconds=settings.openrouter_timeout_seconds,
     ):
         yield chunk
+
+
+
+
+
+
+

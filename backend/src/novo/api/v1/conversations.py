@@ -44,7 +44,7 @@ from novo.models.accounting import (
 )
 from novo.models.gateway import generate_model_reply, stream_model_reply
 from novo.models.registry import ModelCatalog
-from novo.models.service import resolve_route_selection
+from novo.models.service import DEFAULT_ASSISTANT_SYSTEM_PROMPT, resolve_route_selection
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -347,13 +347,7 @@ async def _ensure_response_ready(
         )
         return response
 
-    system_prompt = (
-        "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
-        "Write in plain text with short paragraphs. If you use headings, put them on "
-        "their own line "
-        "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
-        "Avoid dense markdown formatting unless the user explicitly asks for it."
-    )
+    system_prompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
     fallback_models = await _load_retry_models(
         db,
         selected_model_key=model.model_key,
@@ -564,13 +558,7 @@ async def stream_response_events(
                     prompt_hash=prompt_hash,
                     input_tokens=len(response.user_message.content.split()),
                 )
-                system_prompt = (
-                    "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully. "
-                    "Write in plain text with short paragraphs. If you use headings, put them on "
-                    "their own line "
-                    "without markdown symbols like ### or **. Use simple hyphen bullets only when helpful. "
-                    "Avoid dense markdown formatting unless the user explicitly asks for it."
-                )
+                system_prompt = DEFAULT_ASSISTANT_SYSTEM_PROMPT
                 running_text_parts: list[str] = []
                 token_index = 0
                 final_chunk = None

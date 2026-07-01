@@ -31,8 +31,9 @@ If a detail becomes historical, move it into the relevant folder under `docs/` i
 - The docs have been reorganized into purpose-based folders, and this file is the single living work log.
 - The new API documentation lives under `docs/api/`.
 - The desktop GUI now acts as the primary NOVO face for chat, status, and voice work.
-- The selected NOVO desktop voice stack is Piper TTS with the female English `en_US-amy-medium` profile, paired with faster-whisper for STT. The desktop shell can synthesize and play Piper voice output, capture microphone input with push-to-talk, transcribe it locally, and stop playback or streaming on request. The Piper rate is tuned a bit faster than the default. Voice and backend failures now emit exact traces to the desktop/backend terminals while the UI shows safe messages.
+- The selected NOVO desktop voice stack is Piper TTS with the female English `en_US-amy-medium` profile, paired with faster-whisper for STT. The desktop shell can synthesize and play Piper voice output, capture microphone input with push-to-talk, transcribe it locally, and stop playback or streaming on request. The STT runtime auto-detects CUDA, probes it during warm-up, and falls back to CPU if the CUDA runtime is broken. The Piper rate is tuned a bit faster than the default. Voice and backend failures now emit exact traces to the desktop/backend terminals while the UI shows safe messages. Assistant bubbles render markdown cleanly, while speech output strips markdown markers before speaking.
 - Local desktop settings persist safe values such as backend URL, email, and window size without storing secrets.
+- Backend route selection now uses a small in-process cache with explicit invalidation and a short TTL so the fast path stays responsive without going stale.
 
 ## What was completed in E2
 

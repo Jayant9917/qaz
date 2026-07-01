@@ -24,7 +24,11 @@ from novo.identity.security import (
     normalize_email,
     verify_password,
 )
-from novo.models.service import ensure_model_registry_seed, ensure_prompt_registry_seed
+from novo.models.service import (
+    ensure_model_registry_seed,
+    ensure_prompt_registry_seed,
+    invalidate_registry_cache,
+)
 
 OWNER_ROLE_KEY = "owner"
 DEFAULT_PERMISSION_SEEDS = [
@@ -168,6 +172,7 @@ async def ensure_security_seed(db: AsyncSession, settings: Settings) -> User:
     await ensure_model_registry_seed(db, owner_user.id)
     await ensure_prompt_registry_seed(db)
     await db.commit()
+    invalidate_registry_cache()
     return owner_user
 
 

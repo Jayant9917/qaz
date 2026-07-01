@@ -24,8 +24,8 @@ import soundfile as sf
 from .voice import NOVO_VOICE_PROFILE, VoiceProfile
 
 DEFAULT_STT_MODEL = os.environ.get("NOVO_STT_MODEL", "small.en")
-DEFAULT_STT_DEVICE = os.environ.get("NOVO_STT_DEVICE", "cpu")
-DEFAULT_STT_COMPUTE_TYPE = os.environ.get("NOVO_STT_COMPUTE_TYPE", "int8")
+DEFAULT_STT_DEVICE = os.environ.get("NOVO_STT_DEVICE", "auto")
+DEFAULT_STT_COMPUTE_TYPE = os.environ.get("NOVO_STT_COMPUTE_TYPE", "auto")
 DEFAULT_TRANSCRIPTION_PROMPT = (
     "NOVO is a desktop assistant. Common words include NOVO, Virat Kohli, "
     "ChatGPT, email, backend, frontend, microphone, Piper, and documents."
@@ -38,11 +38,6 @@ DEFAULT_SILENCE_SECONDS = float(os.environ.get("NOVO_SILENCE_SECONDS", "0.85"))
 DEFAULT_SPEECH_THRESHOLD = float(os.environ.get("NOVO_SPEECH_THRESHOLD", "0.008"))
 DEFAULT_MIN_SPEECH_SECONDS = float(os.environ.get("NOVO_MIN_SPEECH_SECONDS", "0.3"))
 DEFAULT_NOISE_CALIBRATION_SECONDS = float(os.environ.get("NOVO_NOISE_CALIBRATION_SECONDS", "0.4"))
-DEFAULT_CAPTURE_BLOCK_SECONDS = float(os.environ.get("NOVO_CAPTURE_BLOCK_SECONDS", "0.12"))
-DEFAULT_INITIAL_SILENCE_SECONDS = float(os.environ.get("NOVO_INITIAL_SILENCE_SECONDS", "1.4"))
-DEFAULT_SILENCE_SECONDS = float(os.environ.get("NOVO_SILENCE_SECONDS", "0.85"))
-DEFAULT_SPEECH_THRESHOLD = float(os.environ.get("NOVO_SPEECH_THRESHOLD", "0.008"))
-DEFAULT_MIN_SPEECH_SECONDS = float(os.environ.get("NOVO_MIN_SPEECH_SECONDS", "0.3"))
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +74,41 @@ def _frame_rms(frame: np.ndarray) -> float:
     if array.size == 0:
         return 0.0
     return float(np.sqrt(np.mean(np.square(array))))
+
+
+def _cuda_device_count() -> int:
+    try:
+        import ctranslate2
+    except Exception:  # noqa: BLE001
+        return 0
+
+    try:
+        return int(ctranslate2.get_cuda_device_count())
+    except Exception:  # noqa: BLE001
+        logger.exception("NOVO STT CUDA probe failed")
+        return 0
+
+
+def _resolve_stt_device(preferred_device: str | None = None) -> str:
+    device = (preferred_device or DEFAULT_STT_DEVICE).strip().lower()
+    if device in {"cpu", "cuda"}:
+        return device
+    if device not in {"", "auto"}:
+        logger.warning("NOVO STT device override %r is invalid; falling back to auto detection.", device)
+    return "cuda" if _cuda_device_count() > 0 else "cpu"
+
+
+def _resolve_stt_compute_type(device: str, preferred_compute_type: str | None = None) -> str:
+    compute_type = (preferred_compute_type or DEFAULT_STT_COMPUTE_TYPE).strip().lower()
+    if compute_type and compute_type != "auto" and compute_type != "default":
+        return compute_type
+    return "float16" if device == "cuda" else "int8"
+
+
+def _is_cuda_runtime_failure(exc: Exception) -> bool:
+    message = str(exc).casefold()
+    cuda_markers = ("cublas64_12.dll", "cublas", "cannot be loaded", "not found")
+    return isinstance(exc, RuntimeError) and any(marker in message for marker in cuda_markers)
 
 
 def default_voice_cache_dir() -> Path:
@@ -134,6 +164,9 @@ class PiperVoiceRuntime:
                         exc,
                     )
             return self._voice
+
+    def warm_up(self) -> None:
+        self.load_voice()
 
     def synthesize_to_file(self, text: str, output_path: Path) -> Path:
         cleaned = " ".join(text.split()).strip()
@@ -227,13 +260,13 @@ class FasterWhisperTranscriber:
         self,
         model_size: str = DEFAULT_STT_MODEL,
         *,
-        device: str = DEFAULT_STT_DEVICE,
-        compute_type: str = DEFAULT_STT_COMPUTE_TYPE,
+        device: str | None = None,
+        compute_type: str | None = None,
         language: str | None = "en",
     ) -> None:
         self.model_size = model_size
-        self.device = device
-        self.compute_type = compute_type
+        self.device = _resolve_stt_device(device)
+        self.compute_type = _resolve_stt_compute_type(self.device, compute_type)
         self.language = language
         self.initial_prompt = DEFAULT_TRANSCRIPTION_PROMPT
         self.hotwords = DEFAULT_TRANSCRIPTION_HOTWORDS
@@ -250,6 +283,23 @@ class FasterWhisperTranscriber:
                         compute_type=self.compute_type,
                     )
                 except Exception as exc:  # noqa: BLE001
+                    if self.device == "cuda":
+                        logger.exception("NOVO STT CUDA load failed; falling back to CPU")
+                        try:
+                            self.device = "cpu"
+                            self.compute_type = "int8"
+                            self._model = WhisperModel(
+                                self.model_size,
+                                device=self.device,
+                                compute_type=self.compute_type,
+                            )
+                            return self._model
+                        except Exception as cpu_exc:  # noqa: BLE001
+                            _raise_voice_error(
+                                "stt_model_load",
+                                "NOVO could not load the speech-to-text model on CUDA or CPU. The Whisper model may be unavailable.",
+                                cpu_exc,
+                            )
                     _raise_voice_error(
                         "stt_model_load",
                         "NOVO could not load the speech-to-text model. The Whisper model may be unavailable.",
@@ -257,25 +307,105 @@ class FasterWhisperTranscriber:
                     )
             return self._model
 
+    def _build_warmup_probe(self) -> Path:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
+            probe_path = Path(handle.name)
+        duration_seconds = 0.25
+        sample_rate = 16000
+        sample_count = max(1, int(sample_rate * duration_seconds))
+        timeline = np.linspace(0.0, duration_seconds, sample_count, endpoint=False, dtype=np.float32)
+        waveform = (0.01 * np.sin(2.0 * np.pi * 220.0 * timeline)).astype(np.float32).reshape(-1, 1)
+        sf.write(str(probe_path), waveform, sample_rate)
+        return probe_path
+
+    def warm_up(self) -> None:
+        model = self.load_model()
+        if self.device != "cuda":
+            return
+        probe_path = self._build_warmup_probe()
+        try:
+            try:
+                self._transcribe_with_model(model, probe_path, vad_filter=False, beam_size=1, best_of=1)
+            except Exception as exc:  # noqa: BLE001
+                if _is_cuda_runtime_failure(exc):
+                    logger.warning("NOVO STT CUDA warm-up failed; retrying on CPU", exc_info=exc)
+                    cpu_model = self._switch_to_cpu_model()
+                    self._transcribe_with_model(
+                        cpu_model,
+                        probe_path,
+                        vad_filter=False,
+                        beam_size=1,
+                        best_of=1,
+                    )
+                    return
+                _raise_voice_error(
+                    "stt_warm_up",
+                    "NOVO could not verify the speech-to-text runtime during warm-up. Check the desktop terminal for details.",
+                    exc,
+                )
+        finally:
+            probe_path.unlink(missing_ok=True)
+
+    def runtime_summary(self) -> str:
+        return f"{self.device} / {self.compute_type}"
+
+    def _transcribe_with_model(
+        self,
+        model: WhisperModel,
+        audio_path: Path,
+        *,
+        vad_filter: bool = True,
+        beam_size: int = 5,
+        best_of: int = 5,
+    ) -> str:
+        segments, _info = model.transcribe(
+            str(audio_path),
+            language=self.language,
+            beam_size=beam_size,
+            best_of=best_of,
+            temperature=0.0,
+            condition_on_previous_text=False,
+            vad_filter=vad_filter,
+            vad_parameters={"min_silence_duration_ms": 350},
+            initial_prompt=self.initial_prompt,
+            hotwords=self.hotwords,
+        )
+        return " ".join(segment.text.strip() for segment in segments).strip()
+
+    def _switch_to_cpu_model(self) -> WhisperModel:
+        with self._lock:
+            self.device = "cpu"
+            self.compute_type = "int8"
+            self._model = WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=self.compute_type,
+            )
+            return self._model
+
     def transcribe_file(self, audio_path: Path) -> str:
         try:
             model = self.load_model()
-            segments, _info = model.transcribe(
-                str(audio_path),
-                language=self.language,
-                beam_size=5,
-                best_of=5,
-                temperature=0.0,
-                condition_on_previous_text=False,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 350},
-                initial_prompt=self.initial_prompt,
-                hotwords=self.hotwords,
-            )
-            return " ".join(segment.text.strip() for segment in segments).strip()
+            return self._transcribe_with_model(model, audio_path)
         except VoiceRuntimeError:
             raise
         except Exception as exc:  # noqa: BLE001
+            if self.device == "cuda" and _is_cuda_runtime_failure(exc):
+                logger.warning(
+                    "NOVO STT CUDA transcription failed; retrying on CPU",
+                    exc_info=exc,
+                )
+                try:
+                    model = self._switch_to_cpu_model()
+                    return self._transcribe_with_model(model, audio_path)
+                except VoiceRuntimeError:
+                    raise
+                except Exception as cpu_exc:  # noqa: BLE001
+                    _raise_voice_error(
+                        "speech_transcription",
+                        "NOVO could not transcribe the recording. The Whisper runtime failed on CUDA and the CPU fallback also failed.",
+                        cpu_exc,
+                    )
             _raise_voice_error(
                 "speech_transcription",
                 "NOVO could not transcribe the recording. Check the microphone audio and Whisper model.",

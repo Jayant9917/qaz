@@ -1,6 +1,6 @@
 # NOVO Desktop Assistant
 
-E2.5 desktop shell for NOVO. This is the local daily-use assistant surface. The current UI is a PySide6 modern assistant console with glass panels, animated orb, chat bubbles, live status, and streaming response display. The selected NOVO voice profile is Piper with the female English model `en_US-amy-medium`, tuned to speak a little faster, and the desktop shell can already synthesize and play sample voice output. Voice, backend, and streaming failures now log the exact exception and traceback to the terminal while the UI shows a safe NOVO-facing message. The existing Next.js app remains the Control Center for governance, permissions, audit, settings, and recovery.
+E2.5 desktop shell for NOVO. This is the local daily-use assistant surface. The current UI is a PySide6 modern assistant console with glass panels, animated orb, chat bubbles, live status, and streaming response display. The selected NOVO voice profile is Piper with the female English model `en_US-amy-medium`, tuned to speak a little faster, and the desktop shell can already synthesize and play sample voice output. The faster-whisper STT runtime now auto-detects CUDA, validates the CUDA runtime during warm-up, retries on CPU if the CUDA runtime fails, and defaults to `small.en` with `en` transcription. Voice, backend, and streaming failures now log the exact exception and traceback to the terminal while the UI shows a safe NOVO-facing message. The existing Next.js app remains the Control Center for governance, permissions, audit, settings, and recovery.
 
 ## What exists now
 
@@ -49,10 +49,10 @@ The modern desktop shell uses:
 - PySide6
 - Pillow
 - psutil
-- qtawesome and markdown are installed for upcoming icon/markdown rendering improvements
+- qtawesome and markdown are installed for icon and markdown rendering in the desktop shell
 - Piper is the selected text-to-speech engine for NOVO voice
 - NOVO's Piper speech rate is tuned to be a little faster than the default
-- faster-whisper is the selected speech-to-text engine for the next voice slice
+- faster-whisper is the selected speech-to-text engine for NOVO, with auto CUDA detection, warm-up CUDA probing, and CPU fallback on load or transcription failure
 - sounddevice and soundfile are the audio I/O layer
 - pyttsx3 is available as a Windows fallback voice engine if needed
 

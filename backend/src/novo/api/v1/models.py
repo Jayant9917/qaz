@@ -23,6 +23,7 @@ from novo.models.service import (
     create_model_policy,
     get_model,
     get_model_policy,
+    invalidate_registry_cache,
     list_model_policies,
     list_models,
     resolve_route_selection,
@@ -217,6 +218,7 @@ async def patch_model(
     )
     await db.commit()
     await db.refresh(model)
+    invalidate_registry_cache()
     return await _serialize_model(model)
 
 
@@ -261,6 +263,7 @@ async def post_model_policy(
     )
     await db.commit()
     await db.refresh(policy)
+    invalidate_registry_cache()
     return await _serialize_policy(policy)
 
 
@@ -303,6 +306,7 @@ async def patch_model_policy(
     )
     await db.commit()
     await db.refresh(policy)
+    invalidate_registry_cache()
     return await _serialize_policy(policy)
 
 

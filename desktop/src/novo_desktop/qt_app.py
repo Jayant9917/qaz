@@ -39,6 +39,7 @@ except ImportError:  # pragma: no cover
 
 from .client import ConversationInfo, NovoApiClient, NovoApiError, ResponseEvent, SessionInfo
 from .settings import DesktopSettings, load_desktop_settings, save_desktop_settings
+from .text_rendering import render_assistant_html, render_plain_html, speech_text_from_assistant_markdown
 from .voice import voice_summary
 from .voice_runtime import DEFAULT_CAPTURE_SECONDS, FasterWhisperTranscriber, PiperVoiceRuntime, VoiceRuntimeError
 
@@ -168,8 +169,9 @@ class ChatBubble(QFrame):
         self.setMaximumWidth(720)
         self.label = QLabel()
         self.label.setObjectName("bubbleText")
-        self.label.setTextFormat(Qt.TextFormat.PlainText)
+        self.label.setTextFormat(Qt.TextFormat.RichText)
         self.label.setWordWrap(True)
+        self.label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.time = QLabel(datetime.now().strftime("%I:%M %p"))
         self.time.setObjectName("bubbleTime")
@@ -195,7 +197,19 @@ class ChatBubble(QFrame):
 
     def set_text(self, text: str) -> None:
         self.raw_text = text
-        self.label.setText(text or "...")
+        rendered = render_assistant_html(text) if self.role == "assistant" else render_plain_html(text)
+        self.label.setText(rendered or "...")
+        self.label.adjustSize()
+        self.adjustSize()
+        self.updateGeometry()
+        parent = self.parentWidget()
+        if parent is not None:
+            parent.adjustSize()
+            parent.updateGeometry()
+            grandparent = parent.parentWidget()
+            if grandparent is not None:
+                grandparent.adjustSize()
+                grandparent.updateGeometry()
 
 class StatCard(QFrame):
     def __init__(self, title: str, value: str, accent: str) -> None:
@@ -252,6 +266,7 @@ class NovoQtApp(QMainWindow):
         self._start_backend_health_timer()
         self.set_state("Connecting")
         self.refresh_backend_connection()
+        self._start_voice_warmup()
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -344,7 +359,7 @@ class NovoQtApp(QMainWindow):
 
     def _voice_card(self) -> QWidget:
         card = glass_panel("voicePanel")
-        card.setFixedHeight(162)
+        card.setFixedHeight(186)
         layout = QVBoxLayout(card)
         layout.setContentsMargins(14, 12, 14, 14)
         layout.setSpacing(10)
@@ -357,6 +372,7 @@ class NovoQtApp(QMainWindow):
         row.addWidget(settings)
         layout.addLayout(row)
         layout.addWidget(muted(f"NOVO voice: {voice_summary()}"))
+        layout.addWidget(muted(f"NOVO STT: {self.transcriber.runtime_summary()}"))
         layout.addSpacing(4)
         self.mic_button = QPushButton("MIC")
         self.mic_button.setObjectName("micButton")
@@ -653,7 +669,7 @@ class NovoQtApp(QMainWindow):
             warnings = event.data.get("warnings") or []
             self.add_system_message(f"Warning: {', '.join(warnings)}")
         elif event.event == "response.completed":
-            spoken_text = self.active_assistant_bubble.raw_text.strip() if self.active_assistant_bubble is not None else ""
+            spoken_text = speech_text_from_assistant_markdown(self.active_assistant_bubble.raw_text if self.active_assistant_bubble is not None else "").strip()
             self.send_button.setEnabled(True)
             self.active_assistant_bubble = None
             if spoken_text and not self.response_stop_requested:
@@ -686,6 +702,17 @@ class NovoQtApp(QMainWindow):
         self.style().unpolish(self.connection_badge)
         self.style().polish(self.connection_badge)
         self.run_worker("health")
+
+    def _start_voice_warmup(self) -> None:
+        def worker() -> None:
+            try:
+                self.voice_runtime.warm_up()
+                self.transcriber.warm_up()
+                logger.info("NOVO voice runtime warmed up: %s | STT: %s", voice_summary(), self.transcriber.runtime_summary())
+            except VoiceRuntimeError:
+                logger.exception("NOVO voice warmup failed")
+
+        threading.Thread(target=worker, name="novo-voice-warmup", daemon=True).start()
 
     def add_bubble(self, role: str, text: str) -> ChatBubble:
         bubble = ChatBubble(role, text)
@@ -784,7 +811,7 @@ class NovoQtApp(QMainWindow):
         self._speak_text_async(self.voice_runtime.sample_text)
 
     def _speak_text_async(self, text: str) -> None:
-        cleaned = text.strip()
+        cleaned = speech_text_from_assistant_markdown(text).strip()
         if not cleaned:
             return
         if self.voice_stop_requested:
@@ -1009,3 +1036,4 @@ def main() -> None:
     except KeyboardInterrupt:
         exit_code = 0
     sys.exit(exit_code)
+

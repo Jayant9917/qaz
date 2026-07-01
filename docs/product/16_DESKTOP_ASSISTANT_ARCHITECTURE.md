@@ -162,9 +162,10 @@ The current NOVO desktop direction is:
 - Default voice profile: Piper `en_US-amy-medium`, a female English voice with a slightly faster speaking rate
 - Voice behavior and personality: controlled by backend prompts and policy, not by the TTS engine
 - Error handling: safe user-facing failures in the GUI, exact tracebacks and log detail in the desktop/backend terminals
+- Speech-to-text warm-up probes the CUDA runtime at startup and falls back to CPU automatically if the CUDA path is broken
 - Local settings: backend URL, email, and window size persist without secrets
 
-This keeps NOVO's sound separate from NOVO's personality. The same voice engine can be reused if the model or style changes later. The current desktop shell already uses this Piper profile for local sample playback, push-to-talk capture, local transcription, interruption control, and safe error reporting; wake word and always-on listening remain later work.
+This keeps NOVO's sound separate from NOVO's personality. The same voice engine can be reused if the model or style changes later. The current desktop shell already uses this Piper profile for local sample playback, push-to-talk capture, local transcription, interruption control, safe error reporting, and STT warm-up fallback from broken CUDA to CPU; wake word and always-on listening remain later work.
 
 ## 10. Security Rules
 

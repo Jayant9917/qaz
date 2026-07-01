@@ -175,6 +175,7 @@ Deliver:
 - Stop/interruption control for playback and streaming
 - Non-blocking GUI threading model for audio and backend calls
 - Structured voice/backend error reporting with safe user messages and exact terminal tracebacks
+- STT startup probing plus CPU fallback if the CUDA runtime is broken
 - Safe local settings persistence without secrets
 - Session/bootstrap flow compatible with the backend
 - Safety rule: desktop cannot directly access documents, email, tools, memory, credentials, or model providers

@@ -21,6 +21,7 @@ from novo.models.service import (
     get_prompt_binding,
     get_prompt_template,
     get_prompt_version,
+    invalidate_registry_cache,
     list_prompt_bindings,
     list_prompt_templates,
     list_prompt_versions,
@@ -162,6 +163,7 @@ async def post_prompt_template(
     )
     await db.commit()
     await db.refresh(template)
+    invalidate_registry_cache()
     return await _serialize_template(template)
 
 
@@ -215,6 +217,7 @@ async def post_prompt_template_version(
     )
     await db.commit()
     await db.refresh(version)
+    invalidate_registry_cache()
     return await _serialize_version(version)
 
 
@@ -234,6 +237,7 @@ async def post_prompt_version_evaluate(
     await evaluate_prompt_version(db, version)
     await db.commit()
     await db.refresh(version)
+    invalidate_registry_cache()
     return PromptVersionEvaluationResponse(
         id=version.id,
         evaluation_status=version.evaluation_status,
@@ -255,6 +259,7 @@ async def post_prompt_version_activate(
     await activate_prompt_version(db, version)
     await db.commit()
     await db.refresh(version)
+    invalidate_registry_cache()
     return await _serialize_version(version)
 
 
@@ -272,6 +277,7 @@ async def post_prompt_version_retire(
     await retire_prompt_version(db, version)
     await db.commit()
     await db.refresh(version)
+    invalidate_registry_cache()
     return await _serialize_version(version)
 
 
@@ -316,4 +322,5 @@ async def put_prompt_binding(
     )
     await db.commit()
     await db.refresh(binding)
+    invalidate_registry_cache()
     return await _serialize_binding(binding)
