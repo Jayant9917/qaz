@@ -151,6 +151,11 @@ Unique message_id plus object_id plus purpose. Authorization requires both messa
 
 ## 7. Memory domain
 
+Current implementation note:
+
+- The codebase currently implements memory.memories and memory.memory_access_events.
+- The revision, source, tag, relation, candidate, consolidation, reflection, and graph projection tables remain planned for later E3 slices.
+
 ### 7.1 memory.memories
 
 Canonical memory identity and policy envelope.

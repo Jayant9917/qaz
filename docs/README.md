@@ -1,6 +1,6 @@
 # NOVO Documentation Index
 
-Current checkpoint: E2 complete / E3 ready. The live work file is [docs/current/CURRENT_WORK.md](./current/CURRENT_WORK.md).
+Current checkpoint: E2.5 complete / E3 in progress (first explicit-memory slice verified). The live work file is [docs/current/CURRENT_WORK.md](./current/CURRENT_WORK.md).
 
 This folder is organized so a junior engineer can understand the repo at a glance:
 

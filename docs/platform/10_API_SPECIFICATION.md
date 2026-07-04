@@ -239,17 +239,23 @@ When requested by Control Center or explanation UI:
 
 ## 17. Memory endpoints
 
+Implemented in the current codebase:
+
 - GET /memories
 - POST /memories
+- POST /memories/remember
 - GET /memories/{id}
 - PATCH /memories/{id}
 - POST /memories/{id}/correct
 - POST /memories/{id}/archive
 - POST /memories/{id}/restore
 - DELETE /memories/{id}
+- GET /memories/{id}/access-events
+
+Planned for later E3 slices:
+
 - GET /memories/{id}/revisions
 - GET /memories/{id}/sources
-- GET /memories/{id}/access-events
 - GET /memory-candidates
 - POST /memory-candidates/{id}/resolve
 - POST /memory/reflection-runs
@@ -548,3 +554,4 @@ Action request schemas remain strict.
 - Chat/run events reconnect safely.
 - No endpoint exposes secrets or infrastructure.
 - RAG, memory, agent, tool, approval, model, prompt, automation, audit, and control contracts align with their specifications.
+

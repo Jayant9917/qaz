@@ -6,7 +6,7 @@ import logging
 
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from hashlib import sha256
 from time import perf_counter
 from typing import Annotated
@@ -37,14 +37,11 @@ from novo.conversations.service import (
     list_messages,
 )
 from novo.infrastructure.database import get_session
-from novo.models.accounting import (
-    complete_model_call,
-    create_model_call,
-    get_model_by_key,
-)
+from novo.models.accounting import complete_model_call, create_model_call, get_model_by_key
 from novo.models.gateway import generate_model_reply, stream_model_reply
 from novo.models.registry import ModelCatalog
 from novo.models.service import DEFAULT_ASSISTANT_SYSTEM_PROMPT, resolve_route_selection
+from novo.working_context.service import upsert_working_context
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -196,6 +193,40 @@ async def _load_retry_models(
             fallback_models.append(model)
     return fallback_models
 
+
+def _working_context_ttl_seconds(identity: RequestIdentity) -> int:
+    remaining = int((identity.session.expires_at - datetime.now(UTC)).total_seconds())
+    return max(remaining, 60)
+
+
+async def _project_working_context(
+    identity: RequestIdentity,
+    *,
+    conversation_id: UUID,
+    status: str,
+    current_response_id: UUID | None = None,
+    last_response_id: UUID | None = None,
+    last_user_message_id: UUID | None = None,
+    last_assistant_message_id: UUID | None = None,
+    stream_cursor: str | None = None,
+    active_task: str | None = None,
+) -> None:
+    await upsert_working_context(
+        identity.user.id,
+        identity.session.id,
+        ttl_seconds=_working_context_ttl_seconds(identity),
+        conversation_id=conversation_id,
+        current_response_id=current_response_id,
+        last_response_id=last_response_id,
+        last_user_message_id=last_user_message_id,
+        last_assistant_message_id=last_assistant_message_id,
+        status=status,
+        stream_cursor=stream_cursor,
+        active_task=active_task,
+        expires_at=identity.session.expires_at,
+    )
+
+
 @router.get("", response_model=ConversationListResponse)
 async def get_conversations(
     identity: Annotated[RequestIdentity, Depends(get_request_identity)],
@@ -327,6 +358,15 @@ async def post_conversation_message(
         prompt_version=selection.prompt_version,
         model_provider=selection.model_provider,
         model_name=selection.model_name,
+    )
+    await _project_working_context(
+        identity,
+        conversation_id=conversation.id,
+        status="thinking",
+        current_response_id=response.id,
+        last_user_message_id=message.id,
+        stream_cursor="response.started",
+        active_task="conversation.reply",
     )
     return MessageCreateResponse(message=_message_response(message), response_id=response.id)
 
@@ -479,6 +519,15 @@ async def stream_response_events(
                     ),
                 )
                 event_id += 1
+                await _project_working_context(
+                    identity,
+                    conversation_id=response.conversation_id,
+                    status="streaming",
+                    current_response_id=response.id,
+                    last_user_message_id=response.user_message_id,
+                    stream_cursor="response.started",
+                    active_task="conversation.reply",
+                )
 
                 if response.status == "completed" and response.response_text:
                     assistant_query = await db.execute(
@@ -525,6 +574,16 @@ async def stream_response_events(
                                 response_id=response.id,
                             ),
                         ),
+                    )
+                    await _project_working_context(
+                        identity,
+                        conversation_id=response.conversation_id,
+                        status="idle",
+                        current_response_id=None,
+                        last_response_id=response.id,
+                        last_user_message_id=response.user_message_id,
+                        last_assistant_message_id=assistant_message_obj.id,
+                        stream_cursor="response.completed",
                     )
                     return
 
@@ -583,6 +642,15 @@ async def stream_response_events(
                             ),
                         )
                         event_id += 1
+                        await _project_working_context(
+                            identity,
+                            conversation_id=response.conversation_id,
+                            status="streaming",
+                            current_response_id=response.id,
+                            last_user_message_id=response.user_message_id,
+                            stream_cursor=f"response.token:{token_index}",
+                            active_task="conversation.reply",
+                        )
                         await asyncio.sleep(0)
                     if chunk.done:
                         final_chunk = chunk
@@ -642,6 +710,16 @@ async def stream_response_events(
                     assistant_message=assistant_message,
                     latency_ms=latency_ms,
                 )
+                await _project_working_context(
+                    identity,
+                    conversation_id=response.conversation_id,
+                    status="idle",
+                    current_response_id=None,
+                    last_response_id=response.id,
+                    last_user_message_id=response.user_message_id,
+                    last_assistant_message_id=assistant_message.id,
+                    stream_cursor="response.completed",
+                )
                 yield _sse_event(
                     event_id,
                     "response.completed",
@@ -666,6 +744,16 @@ async def stream_response_events(
                     db,
                     response=response,
                     error_message="NOVO backend error while generating the reply",
+                )
+                await _project_working_context(
+                    identity,
+                    conversation_id=response.conversation_id,
+                    status="failed",
+                    current_response_id=None,
+                    last_response_id=response.id,
+                    last_user_message_id=response.user_message_id,
+                    stream_cursor="response.failed",
+                    active_task="conversation.reply",
                 )
             except Exception:
                 logger.exception(

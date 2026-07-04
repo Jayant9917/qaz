@@ -196,12 +196,28 @@ Deliver:
 
 - Redis working context
 - Explicit remember command
-- memories, revisions, sources, and tags
+- Durable memory core: memory.memories and memory.memory_access_events
+- Memory CRUD, explicit remember, correction, archive, restore, delete, and access-event APIs
 - Memory Guardrails
 - Memory Center
-- Correction, archive, classification, and deletion
+- Correction, classification, provenance, and deletion workflows
 - Access explanation
 - Candidate extraction disabled by default
+
+Implemented so far in this slice:
+
+- Owner-scoped memory records with provenance fields
+- Append-only access logging
+- API routes for list/create/get/update/remember/correct/archive/restore/delete/access-events
+- Integration and user-flow tests for the memory lifecycle
+
+Still planned for later E3 slices:
+
+- Redis working context
+- Revisions, sources, tags, relations, candidates, consolidation, and reflection
+- Memory guardrails and Memory Center
+- Broader provenance, reconciliation, and export flows
+- Candidate extraction and reflection workflows
 
 Exit gate:
 
