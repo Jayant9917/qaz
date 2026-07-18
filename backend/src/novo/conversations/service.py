@@ -1,4 +1,4 @@
-﻿"""Conversation service helpers."""
+"""Conversation service helpers."""
 
 from __future__ import annotations
 
@@ -210,5 +210,3 @@ async def fail_response_run(
     await db.commit()
     await db.refresh(response)
     return response
-
-

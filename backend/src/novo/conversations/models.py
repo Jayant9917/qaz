@@ -1,4 +1,4 @@
-﻿"""Conversation domain models."""
+"""Conversation domain models."""
 
 from __future__ import annotations
 
@@ -116,5 +116,3 @@ class Message(Base):
     conversation: Mapped[Conversation] = relationship(
         "Conversation", back_populates="messages", lazy="joined"
     )
-
-

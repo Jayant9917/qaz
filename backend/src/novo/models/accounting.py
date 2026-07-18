@@ -1,4 +1,4 @@
-﻿"""Model call accounting services."""
+"""Model call accounting services."""
 
 from __future__ import annotations
 
@@ -188,9 +188,7 @@ async def list_model_health(db: AsyncSession) -> list[ModelHealthRow]:
 
     items: list[ModelHealthRow] = []
     models = await db.scalars(
-        select(ModelCatalog).order_by(
-            ModelCatalog.provider.asc(), ModelCatalog.model_key.asc()
-        )
+        select(ModelCatalog).order_by(ModelCatalog.provider.asc(), ModelCatalog.model_key.asc())
     )
     for model in list(models):
         run_count, success_count, last_run_at = usage_map.get(model.id, (0, 0, None))

@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from novo.api.dependencies import RequestIdentity, get_request_identity, require_csrf_protection
 from novo.infrastructure.database import get_session
-from novo.memory.models import Memory, MemoryAccessEvent
+from novo.memory.candidates import contains_secret, detect_memory_candidate
+from novo.memory.models import Memory, MemoryAccessEvent, MemoryRevision
 from novo.memory.service import (
     archive_memory,
     create_memory,
@@ -20,6 +21,7 @@ from novo.memory.service import (
     get_memory,
     list_memories,
     list_memory_access_events,
+    list_memory_revisions,
     record_memory_access_event,
     restore_memory,
     update_memory,
@@ -62,6 +64,22 @@ class MemoryResponse(MemoryBaseModel):
     version: int
 
 
+class MemoryRevisionResponse(MemoryBaseModel):
+    id: UUID
+    owner_id: UUID
+    memory_id: UUID
+    version: int
+    title: str
+    canonical_content: str
+    status: str
+    source_type: str
+    created_at: datetime
+
+
+class MemoryRevisionListResponse(BaseModel):
+    items: list[MemoryRevisionResponse]
+
+
 class MemoryAccessEventResponse(MemoryBaseModel):
     id: UUID
     owner_id: UUID
@@ -87,6 +105,23 @@ class MemoryAccessEventListResponse(BaseModel):
     items: list[MemoryAccessEventResponse]
 
 
+class MemorySuggestRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=50_000)
+    source_locator: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemorySuggestionResponse(BaseModel):
+    should_suggest: bool
+    title: str | None = None
+    content: str | None = None
+    kind: str | None = None
+    classification: str | None = None
+    confidence: float | None = None
+    importance: float | None = None
+    auto_save: bool = False
+    reason: str | None = None
+
+
 class MemoryCreateRequest(BaseModel):
     kind: str = Field(default="long_term", min_length=1, max_length=24)
     title: str = Field(min_length=1, max_length=240)
@@ -108,8 +143,6 @@ class MemoryCreateRequest(BaseModel):
     embedding_version: str | None = Field(default=None, max_length=120)
 
 
-
-
 class MemoryRememberRequest(BaseModel):
     content: str = Field(min_length=1, max_length=50_000)
     title: str | None = Field(default=None, min_length=1, max_length=240)
@@ -124,6 +157,7 @@ class MemoryRememberRequest(BaseModel):
     source_locator: dict[str, Any] = Field(default_factory=dict)
     evidence_excerpt: str | None = Field(default=None, max_length=5000)
     embedding_version: str | None = Field(default=None, max_length=120)
+
 
 class MemoryUpdateRequest(BaseModel):
     kind: str | None = Field(default=None, min_length=1, max_length=24)
@@ -156,6 +190,10 @@ def _memory_response(memory: Memory) -> MemoryResponse:
     return MemoryResponse.model_validate(memory, from_attributes=True)
 
 
+def _revision_response(revision: MemoryRevision) -> MemoryRevisionResponse:
+    return MemoryRevisionResponse.model_validate(revision, from_attributes=True)
+
+
 def _access_event_response(event: MemoryAccessEvent) -> MemoryAccessEventResponse:
     return MemoryAccessEventResponse.model_validate(event, from_attributes=True)
 
@@ -169,6 +207,30 @@ def _derive_memory_title(content: str) -> str:
     if not title:
         title = compact[:240].rstrip(".?!,;:")
     return title or "Remembered note"
+
+
+@router.post("/suggest", response_model=MemorySuggestionResponse, response_model_exclude_none=True)
+async def suggest_memory(
+    payload: MemorySuggestRequest,
+    identity: Annotated[RequestIdentity, Depends(require_csrf_protection)],
+) -> MemorySuggestionResponse:
+    """Classify chat text without storing it; the owner must approve any save."""
+
+    del identity
+    candidate = detect_memory_candidate(payload.content)
+    if candidate is None:
+        return MemorySuggestionResponse(should_suggest=False)
+    return MemorySuggestionResponse(
+        should_suggest=True,
+        title=candidate.title,
+        content=candidate.content,
+        kind=candidate.kind,
+        classification=candidate.classification,
+        confidence=candidate.confidence,
+        importance=candidate.importance,
+        auto_save=candidate.auto_save,
+        reason=candidate.reason,
+    )
 
 
 async def _load_memory_or_404(
@@ -204,6 +266,11 @@ async def remember_memory(
     identity: Annotated[RequestIdentity, Depends(require_csrf_protection)],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> MemoryResponse:
+    if contains_secret(payload.content):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Memory cannot contain passwords, API keys, tokens, or recovery codes.",
+        )
     memory = await create_memory(
         db,
         owner_id=identity.user.id,
@@ -225,12 +292,18 @@ async def remember_memory(
     )
     return _memory_response(memory)
 
+
 @router.post("", response_model=MemoryResponse, status_code=status.HTTP_201_CREATED)
 async def post_memory(
     payload: MemoryCreateRequest,
     identity: Annotated[RequestIdentity, Depends(require_csrf_protection)],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> MemoryResponse:
+    if contains_secret(payload.canonical_content):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Memory cannot contain passwords, API keys, tokens, or recovery codes.",
+        )
     memory = await create_memory(
         db,
         owner_id=identity.user.id,
@@ -281,6 +354,11 @@ async def patch_memory(
     identity: Annotated[RequestIdentity, Depends(require_csrf_protection)],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> MemoryResponse:
+    if payload.canonical_content is not None and contains_secret(payload.canonical_content):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Memory cannot contain passwords, API keys, tokens, or recovery codes.",
+        )
     memory = await _load_memory_or_404(db, identity, memory_id)
     if all(
         value is None
@@ -341,6 +419,11 @@ async def correct_memory(
     identity: Annotated[RequestIdentity, Depends(require_csrf_protection)],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> MemoryResponse:
+    if contains_secret(payload.canonical_content):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Memory cannot contain passwords, API keys, tokens, or recovery codes.",
+        )
     memory = await _load_memory_or_404(db, identity, memory_id)
     updated = await update_memory(
         db,
@@ -398,6 +481,17 @@ async def delete_memory_route(
     memory = await _load_memory_or_404(db, identity, memory_id)
     deleted = await delete_memory(db, memory=memory)
     return _memory_response(deleted)
+
+
+@router.get("/{memory_id}/revisions", response_model=MemoryRevisionListResponse)
+async def get_memory_revisions(
+    memory_id: UUID,
+    identity: Annotated[RequestIdentity, Depends(get_request_identity)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> MemoryRevisionListResponse:
+    await _load_memory_or_404(db, identity, memory_id)
+    items = await list_memory_revisions(db, identity.user.id, memory_id)
+    return MemoryRevisionListResponse(items=[_revision_response(item) for item in items])
 
 
 @router.get("/{memory_id}/access-events", response_model=MemoryAccessEventListResponse)

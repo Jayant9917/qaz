@@ -1,4 +1,4 @@
-﻿"""Model call accounting records."""
+"""Model call accounting records."""
 
 from __future__ import annotations
 

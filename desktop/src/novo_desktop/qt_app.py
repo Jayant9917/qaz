@@ -77,6 +77,9 @@ class BackendWorker(QObject):
             elif self.action == "new_conversation":
                 title = str(self.kwargs["title"])
                 self.result.emit(WorkerResult("conversation_ok", self.client.create_conversation(title)))
+            elif self.action == "remember_memory":
+                self.client.remember_memory(dict(self.kwargs["suggestion"]))
+                self.result.emit(WorkerResult("memory_saved", None))
             elif self.action == "send":
                 conversation_id = self.kwargs.get("conversation_id")
                 if conversation_id is None:
@@ -85,6 +88,17 @@ class BackendWorker(QObject):
                     conversation_id = conversation.id
                     self.result.emit(WorkerResult("conversation_ok", conversation))
                 chat = self.client.send_message(str(conversation_id), str(self.kwargs["content"]))
+                try:
+                    suggestion = self.client.suggest_memory(str(conversation_id), chat.response_id, str(self.kwargs["content"]))
+                    if suggestion.get("should_suggest"):
+                        suggestion["source_locator"] = {
+                            "channel": "voice" if self.kwargs.get("source") == "voice" else "desktop",
+                            "conversation_id": str(conversation_id),
+                            "message_id": chat.response_id,
+                        }
+                        self.result.emit(WorkerResult("memory_suggestion", suggestion))
+                except NovoApiError:
+                    logger.exception("NOVO voice/chat memory suggestion failed; continuing response")
                 self.result.emit(WorkerResult("assistant_start", chat.response_id))
                 for item in self.client.stream_response_events(chat.response_id):
                     self.event.emit(item)
@@ -590,7 +604,7 @@ class NovoQtApp(QMainWindow):
         self.set_state("Thinking")
         self.send_button.setEnabled(False)
         self.response_stop_requested = False
-        self.run_worker("send", conversation_id=self.conversation_id, content=content)
+        self.run_worker("send", conversation_id=self.conversation_id, content=content, source=source)
 
     def handle_worker_result(self, result: WorkerResult) -> None:
         if result.kind == "health_ok":
@@ -619,6 +633,18 @@ class NovoQtApp(QMainWindow):
             self.conversation_count += 1
             self.conversations_card.set_value(str(self.conversation_count))
             self.add_system_message(f"Conversation ready: {result.payload.title}")
+        elif result.kind == "memory_suggestion" and isinstance(result.payload, dict):
+            approved = QMessageBox.question(
+                self,
+                "NOVO memory suggestion",
+                f"Should NOVO remember this?\n\n{result.payload.get('content', '')}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if approved == QMessageBox.StandardButton.Yes:
+                self.run_worker("remember_memory", suggestion=result.payload)
+        elif result.kind == "memory_saved":
+            self.add_system_message("Memory saved with your approval.")
         elif result.kind == "assistant_start":
             self.active_assistant_bubble = self.add_bubble("assistant", "")
             self.set_state("Thinking")
@@ -795,8 +821,9 @@ class NovoQtApp(QMainWindow):
                     return
                 self._ui(lambda: self._submit_message(cleaned, source="voice"))
             except VoiceRuntimeError as exc:
-                self._ui(lambda: self.add_system_message(exc.user_message))
-            except Exception as exc:  # noqa: BLE001
+                message = exc.user_message
+                self._ui(lambda: self.add_system_message(message))
+            except Exception:  # noqa: BLE001
                 logger.exception("Unexpected NOVO voice capture failure")
                 self._ui(lambda: self.add_system_message("NOVO voice capture hit an unexpected error. Check the desktop terminal for details."))
             finally:

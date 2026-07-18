@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
+import re
 from typing import Any
 from uuid import UUID
 
@@ -12,16 +14,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from novo.infrastructure.rls import apply_owner_context
-from novo.memory.models import Memory, MemoryAccessEvent
+from novo.memory.models import Memory, MemoryAccessEvent, MemoryRevision
 
-DEFAULT_KIND = 'long_term'
-DEFAULT_CLASSIFICATION = 'private'
-DEFAULT_STATUS = 'active'
-DEFAULT_CONFIDENCE = Decimal('1.000')
-DEFAULT_IMPORTANCE = Decimal('0.500')
-DEFAULT_SOURCE_TYPE = 'explicit_remember'
-DEFAULT_EXTRACTION_METHOD = 'explicit'
-DEFAULT_EMBEDDING_STATUS = 'not_requested'
+DEFAULT_KIND = "long_term"
+DEFAULT_CLASSIFICATION = "private"
+DEFAULT_STATUS = "active"
+DEFAULT_CONFIDENCE = Decimal("1.000")
+DEFAULT_IMPORTANCE = Decimal("0.500")
+DEFAULT_SOURCE_TYPE = "explicit_remember"
+DEFAULT_EXTRACTION_METHOD = "explicit"
+DEFAULT_EMBEDDING_STATUS = "not_requested"
 
 
 def _now() -> datetime:
@@ -37,7 +39,7 @@ def _decimal(value: Decimal | float | int | None, default: Decimal) -> Decimal:
 
 
 def _hash_text(text: str | None) -> str:
-    return sha256((text or '').encode('utf-8')).hexdigest()
+    return sha256((text or "").encode("utf-8")).hexdigest()
 
 
 def _locator(value: dict[str, Any] | None) -> dict[str, Any]:
@@ -143,9 +145,21 @@ async def create_memory(
         embedding_version=embedding_version,
         version=1,
     )
-    if status == 'deleted':
+    if status == "deleted":
         memory.deleted_at = now
     db.add(memory)
+    await db.flush()
+    db.add(
+        MemoryRevision(
+            owner_id=owner_id,
+            memory_id=memory.id,
+            version=memory.version,
+            title=memory.title,
+            canonical_content=memory.canonical_content,
+            status=memory.status,
+            source_type=memory.source_type,
+        )
+    )
     await db.commit()
     await apply_owner_context(db, owner_id)
     await db.refresh(memory)
@@ -176,6 +190,17 @@ async def update_memory(
     embedding_version: str | None = None,
 ) -> Memory:
     now = _now()
+    db.add(
+        MemoryRevision(
+            owner_id=memory.owner_id,
+            memory_id=memory.id,
+            version=memory.version,
+            title=memory.title,
+            canonical_content=memory.canonical_content,
+            status=memory.status,
+            source_type=memory.source_type,
+        )
+    )
     if title is not None:
         memory.title = title
     if kind is not None:
@@ -187,7 +212,7 @@ async def update_memory(
         memory.classification = classification
     if status is not None:
         memory.status = status
-        memory.deleted_at = now if status == 'deleted' else None
+        memory.deleted_at = now if status == "deleted" else None
     if confidence is not None:
         memory.confidence = _decimal(confidence, DEFAULT_CONFIDENCE)
     if importance is not None:
@@ -222,28 +247,92 @@ async def update_memory(
     return memory
 
 
+
+_STOP_WORDS = {"a", "an", "and", "are", "for", "from", "how", "i", "is", "it", "my", "of", "the", "to", "what", "with", "you"}
+
+
+@dataclass(frozen=True, slots=True)
+class MemorySearchMatch:
+    memory: Memory
+    score: float
+
+
+def _search_tokens(value: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+", value.casefold()) if token not in _STOP_WORDS}
+
+
+async def search_relevant_memories(
+    db: AsyncSession,
+    owner_id: UUID,
+    query: str,
+    *,
+    limit: int = 5,
+) -> list[MemorySearchMatch]:
+    """Find active owner memories using a conservative lexical relevance score."""
+
+    query_tokens = _search_tokens(query)
+    if len(query_tokens) < 2:
+        return []
+    result = await db.execute(
+        select(Memory)
+        .where(
+            Memory.owner_id == owner_id,
+            Memory.status == "active",
+            Memory.deleted_at.is_(None),
+            (Memory.valid_until.is_(None) | (Memory.valid_until > _now())),
+        )
+        .order_by(Memory.importance.desc(), Memory.updated_at.desc())
+        .limit(200)
+    )
+    matches: list[MemorySearchMatch] = []
+    for memory in result.scalars().all():
+        memory_tokens = _search_tokens(f"{memory.title} {memory.canonical_content}")
+        overlap = query_tokens & memory_tokens
+        if not overlap:
+            continue
+        score = len(overlap) / max(len(query_tokens), 1)
+        if query.casefold() in memory.canonical_content.casefold():
+            score += 0.35
+        if score >= 0.25:
+            matches.append(MemorySearchMatch(memory=memory, score=min(score, 1.0)))
+    matches.sort(key=lambda match: (match.score, float(match.memory.importance)), reverse=True)
+    return matches[:limit]
+
+async def list_memory_revisions(
+    db: AsyncSession,
+    owner_id: UUID,
+    memory_id: UUID,
+) -> list[MemoryRevision]:
+    result = await db.execute(
+        select(MemoryRevision)
+        .where(MemoryRevision.owner_id == owner_id, MemoryRevision.memory_id == memory_id)
+        .order_by(MemoryRevision.version.desc(), MemoryRevision.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def archive_memory(db: AsyncSession, *, memory: Memory) -> Memory:
-    return await update_memory(db, memory=memory, status='archived')
+    return await update_memory(db, memory=memory, status="archived")
 
 
 async def restore_memory(db: AsyncSession, *, memory: Memory) -> Memory:
     memory.deleted_at = None
-    return await update_memory(db, memory=memory, status='active')
+    return await update_memory(db, memory=memory, status="active")
 
 
 async def delete_memory(db: AsyncSession, *, memory: Memory) -> Memory:
-    return await update_memory(db, memory=memory, status='deleted')
+    return await update_memory(db, memory=memory, status="deleted")
 
 
 async def record_memory_access_event(
     db: AsyncSession,
     *,
     memory: Memory,
-    actor_type: str = 'owner',
+    actor_type: str = "owner",
     actor_id: UUID | None = None,
     agent_run_id: UUID | None = None,
-    purpose: str = 'memory.read',
-    decision: str = 'allowed',
+    purpose: str = "memory.read",
+    decision: str = "allowed",
     policy_version_id: UUID | None = None,
     relevance_score: Decimal | float | int | None = None,
     used_in_prompt: bool = False,
@@ -276,5 +365,3 @@ async def record_memory_access_event(
     await db.refresh(event)
     await db.refresh(memory)
     return event
-
-

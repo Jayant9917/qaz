@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from uuid import uuid4
 
 import pytest
@@ -36,8 +35,7 @@ async def test_openrouter_gateway_falls_back_safely(monkeypatch: pytest.MonkeyPa
         user_message="my api_key is sk-abcdef1234567890",
         prompt_version="conversation.reply.v1",
         system_prompt=(
-            "You are NOVO, the owner-first AI OS. "
-            "Respond calmly, directly, and helpfully."
+            "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully."
         ),
     )
 
@@ -49,7 +47,6 @@ async def test_openrouter_gateway_falls_back_safely(monkeypatch: pytest.MonkeyPa
     assert "sk-" not in reply.safe_text
     assert reply.findings
     get_settings.cache_clear()
-
 
 
 @pytest.mark.asyncio
@@ -85,6 +82,7 @@ async def test_stream_reply_yields_tokens(monkeypatch: pytest.MonkeyPatch) -> No
     assert chunks[-1].used_fallback is True
     assert chunks[-1].fallback_reason == "missing_api_key"
     get_settings.cache_clear()
+
 
 @pytest.mark.asyncio
 async def test_openrouter_gateway_retries_before_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,8 +149,7 @@ async def test_openrouter_gateway_retries_before_fallback(monkeypatch: pytest.Mo
         user_message="Tell me something useful.",
         prompt_version="conversation.reply.v1",
         system_prompt=(
-            "You are NOVO, the owner-first AI OS. "
-            "Respond calmly, directly, and helpfully."
+            "You are NOVO, the owner-first AI OS. Respond calmly, directly, and helpfully."
         ),
     )
 

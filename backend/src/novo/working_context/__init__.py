@@ -10,10 +10,10 @@ from novo.working_context.service import (
 )
 
 __all__ = [
-    'WorkingContext',
-    'append_working_context_note',
-    'clear_working_context',
-    'get_working_context',
-    'save_working_context',
-    'upsert_working_context',
+    "WorkingContext",
+    "append_working_context_note",
+    "clear_working_context",
+    "get_working_context",
+    "save_working_context",
+    "upsert_working_context",
 ]

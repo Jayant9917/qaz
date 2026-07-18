@@ -116,6 +116,37 @@ class NovoApiClient:
             user_message=str(message.get("content") or content),
         )
 
+    def suggest_memory(self, conversation_id: str, message_id: str, content: str) -> dict[str, Any]:
+        return self._request_json(
+            "POST",
+            "memories/suggest",
+            {
+                "content": content,
+                "source_locator": {
+                    "channel": "desktop",
+                    "conversation_id": conversation_id,
+                    "message_id": message_id,
+                },
+            },
+            csrf=True,
+        )
+
+    def remember_memory(self, suggestion: dict[str, Any]) -> dict[str, Any]:
+        return self._request_json(
+            "POST",
+            "memories/remember",
+            {
+                "content": str(suggestion.get("content") or ""),
+                "title": str(suggestion.get("title") or ""),
+                "kind": str(suggestion.get("kind") or "long_term"),
+                "classification": str(suggestion.get("classification") or "private"),
+                "confidence": float(suggestion.get("confidence") or 0.78),
+                "importance": float(suggestion.get("importance") or 0.65),
+                "source_locator": suggestion.get("source_locator") or {"channel": "desktop"},
+                "evidence_excerpt": str(suggestion.get("content") or ""),
+            },
+            csrf=True,
+        )
     def stream_response_events(self, response_id: str) -> Iterator[ResponseEvent]:
         response = self._open("GET", f"conversations/responses/{response_id}/events")
         event_name = "message"

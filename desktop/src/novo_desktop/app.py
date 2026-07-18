@@ -15,6 +15,7 @@ from .voice import voice_summary
 
 CONTROL_CENTER_URL = "http://localhost:3000"
 DEFAULT_BACKEND_URL = "http://localhost:8000"
+logger = logging.getLogger(__name__)
 
 
 def _desktop_session_title() -> str:
@@ -233,10 +234,24 @@ class NovoDesktopApp(tk.Tk):
             self.conversation_id = conversation.id
             self.queue.put(("conversation_ok", conversation))
         chat = self.client.send_message(self.conversation_id, content)
+        try:
+            suggestion = self.client.suggest_memory(self.conversation_id, chat.response_id, content)
+            if suggestion.get("should_suggest"):
+                suggestion["source_locator"] = {
+                    "channel": "desktop",
+                    "conversation_id": self.conversation_id,
+                    "message_id": chat.response_id,
+                }
+                self.queue.put(("memory_suggestion", suggestion))
+        except NovoApiError:
+            logger.exception("NOVO memory suggestion failed; continuing chat")
         self.queue.put(("assistant_start", chat.response_id))
         for event in self.client.stream_response_events(chat.response_id):
             self.queue.put(("response_event", event))
 
+    def _save_memory_suggestion(self, suggestion: dict[str, object]) -> None:
+        self.client.remember_memory(suggestion)
+        self.queue.put(("memory_saved", None))
     def _run_worker(self, name: str, target) -> None:  # noqa: ANN001
         def wrapped() -> None:
             try:
@@ -279,6 +294,17 @@ class NovoDesktopApp(tk.Tk):
             self.conversation_id = conversation.id
             self._append_system(f"Conversation ready: {conversation.title}")
             self._set_state("Idle")
+            return
+        if kind == "memory_suggestion" and isinstance(payload, dict):
+            approved = messagebox.askyesno(
+                "NOVO memory suggestion",
+                f"Should NOVO remember this?\n\n{payload.get('content', '')}",
+            )
+            if approved:
+                self._run_worker("remember_memory", lambda: self._save_memory_suggestion(payload))
+            return
+        if kind == "memory_saved":
+            self._append_system("Memory saved with your approval.")
             return
         if kind == "assistant_start":
             self._append_assistant_prefix()

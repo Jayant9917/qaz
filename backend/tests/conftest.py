@@ -53,7 +53,9 @@ async def _recreate_test_database(db_name: str) -> None:
     engine = create_async_engine(admin_dsn, isolation_level="AUTOCOMMIT", echo=False)
     try:
         async with engine.connect() as connection:
-            await connection.execute(text(f'CREATE DATABASE "{db_name}" OWNER "{settings.postgres_user}"'))
+            await connection.execute(
+                text(f'CREATE DATABASE "{db_name}" OWNER "{settings.postgres_user}"')
+            )
     finally:
         await engine.dispose()
 

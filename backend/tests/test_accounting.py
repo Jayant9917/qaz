@@ -1,4 +1,4 @@
-﻿"""Accounting and guardrail tests for the E2 fast path."""
+"""Accounting and guardrail tests for the E2 fast path."""
 
 from __future__ import annotations
 
@@ -68,6 +68,5 @@ def test_guardrails_emit_warning_and_model_accounting(client: TestClient) -> Non
     health_items = health.json()["items"]
     assert health_items
     assert any(
-        item["health_status"] in {"healthy", "disabled", "degraded"}
-        for item in health_items
+        item["health_status"] in {"healthy", "disabled", "degraded"} for item in health_items
     )

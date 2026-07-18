@@ -343,10 +343,7 @@ async def get_model_usage(
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> ModelUsageResponse:
     usage_items = await list_model_usage(db)
-    items = [
-        ModelUsageItem.model_validate(item, from_attributes=True)
-        for item in usage_items
-    ]
+    items = [ModelUsageItem.model_validate(item, from_attributes=True) for item in usage_items]
     return ModelUsageResponse(items=items)
 
 
@@ -356,8 +353,5 @@ async def get_model_health(
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> ModelHealthResponse:
     health_items = await list_model_health(db)
-    items = [
-        ModelHealthItem.model_validate(item, from_attributes=True)
-        for item in health_items
-    ]
+    items = [ModelHealthItem.model_validate(item, from_attributes=True) for item in health_items]
     return ModelHealthResponse(items=items)

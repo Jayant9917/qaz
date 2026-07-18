@@ -57,6 +57,21 @@ type SendMessageResponse = {
   response_id: string;
 };
 
+type MemorySuggestion = {
+  title: string;
+  content: string;
+  kind: string;
+  classification: string;
+  confidence: number;
+  importance: number;
+  reason: string;
+};
+
+type MemoryNotice = {
+  id: string;
+  title: string;
+};
+
 type StreamCompletedEvent = {
   response_id: string;
   conversation_id: string;
@@ -183,6 +198,9 @@ export default function ChatPage() {
   const [hydrated, setHydrated] = useState(false);
   const streamRef = useRef<EventSource | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
+  const [isSavingMemory, setIsSavingMemory] = useState(false);
+  const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
 
   const removeToast = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -497,6 +515,106 @@ export default function ChatPage() {
     }
   }, [authFetch, conversations, nextConversationTitle, pushToast]);
 
+  const requestMemorySuggestion = useCallback(
+    async (content: string, conversationId: string, messageId: string) => {
+      try {
+        const response = await authFetch("/memories/suggest", {
+          method: "POST",
+          body: JSON.stringify({
+            content,
+            source_locator: { channel: "chat", conversation_id: conversationId, message_id: messageId },
+          }),
+        });
+        if (!response.ok) {
+          return;
+        }
+        const suggestion = (await response.json()) as {
+          should_suggest?: boolean;
+          title?: string;
+          content?: string;
+          kind?: string;
+          classification?: string;
+          confidence?: number;
+          importance?: number;
+          auto_save?: boolean;
+          reason?: string;
+        };
+        if (
+          suggestion.should_suggest &&
+          suggestion.title &&
+          suggestion.content &&
+          suggestion.kind &&
+          suggestion.classification &&
+          typeof suggestion.confidence === "number" &&
+          typeof suggestion.importance === "number" &&
+          suggestion.reason
+        ) {
+          setMemorySuggestion({
+            title: suggestion.title,
+            content: suggestion.content,
+            kind: suggestion.kind,
+            classification: suggestion.classification,
+            confidence: suggestion.confidence,
+            importance: suggestion.importance,
+            reason: suggestion.reason,
+          });
+        }
+      } catch {
+        // Memory suggestions are optional and must never interrupt chat.
+      }
+    },
+    [authFetch],
+  );
+
+  const handleApproveMemory = useCallback(async () => {
+    if (!memorySuggestion || isSavingMemory) {
+      return;
+    }
+    setIsSavingMemory(true);
+    try {
+      const response = await authFetch("/memories/remember", {
+        method: "POST",
+        body: JSON.stringify({
+          content: memorySuggestion.content,
+          title: memorySuggestion.title,
+          kind: memorySuggestion.kind,
+          classification: memorySuggestion.classification,
+          confidence: memorySuggestion.confidence,
+          importance: memorySuggestion.importance,
+          source_locator: { channel: "chat", approval: "owner" },
+          evidence_excerpt: memorySuggestion.content,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(getUserFacingErrorMessage(response.status, detail, "Could not save this memory."));
+      }
+      setMemorySuggestion(null);
+      pushToast({
+        tone: "success",
+        title: "Memory saved",
+        description: "NOVO will use this approved detail in future conversations.",
+      });
+    } catch (error) {
+      pushToast({
+        tone: "error",
+        title: "Memory not saved",
+        description: error instanceof Error ? error.message : "Could not save this memory.",
+      });
+    } finally {
+      setIsSavingMemory(false);
+    }
+  }, [authFetch, isSavingMemory, memorySuggestion, pushToast]);
+  const handleUndoMemory = useCallback(async () => {
+    if (!memoryNotice) {
+      return;
+    }
+    const response = await authFetch("/memories/" + memoryNotice.id, { method: "DELETE" });
+    if (response.ok) {
+      setMemoryNotice(null);
+      pushToast({ tone: "info", title: "Memory undone", description: "The detail was removed from NOVO memory." });
+    }
+  }, [authFetch, memoryNotice, pushToast]);
   const handleSendMessage = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedConversationId || !draft.trim() || isSending) {
@@ -571,6 +689,7 @@ export default function ChatPage() {
       }
 
       startResponseStream(payload.response_id);
+      void requestMemorySuggestion(draftText, selectedConversationId, payload.message.id);
     } catch (error) {
       setMessages((current) => current.filter((message) => message.id !== pendingMessage.id));
       const message = error instanceof Error ? error.message : "Failed to send message.";
@@ -580,7 +699,7 @@ export default function ChatPage() {
     } finally {
       setIsSending(false);
     }
-  }, [authFetch, draft, isSending, messages.length, pushToast, selectedConversation, selectedConversationId, startResponseStream]);
+  }, [authFetch, draft, isSending, messages.length, pushToast, requestMemorySuggestion, selectedConversation, selectedConversationId, startResponseStream]);
 
   return (
     <main className="chat-shell">
@@ -702,6 +821,30 @@ export default function ChatPage() {
               </section>
             )}
 
+            {memoryNotice ? (
+              <aside className="chat-memory-notice" aria-label="Saved memory notification">
+                <span>Saved to memory: <strong>{memoryNotice.title}</strong></span>
+                <button type="button" onClick={() => void handleUndoMemory()}>Undo</button>
+              </aside>
+            ) : null}
+            {memorySuggestion ? (
+              <aside className="chat-memory-suggestion" aria-label="Memory suggestion">
+                <div>
+                  <div className="eyebrow">NOVO noticed durable context</div>
+                  <strong>{memorySuggestion.title}</strong>
+                  <p>{memorySuggestion.content}</p>
+                  <small>{memorySuggestion.reason} Nothing is saved until you approve it.</small>
+                </div>
+                <div className="chat-memory-suggestion-actions">
+                  <button type="button" onClick={() => void handleApproveMemory()} disabled={isSavingMemory}>
+                    {isSavingMemory ? "Saving..." : "Remember this"}
+                  </button>
+                  <button type="button" onClick={() => setMemorySuggestion(null)} disabled={isSavingMemory}>
+                    Not now
+                  </button>
+                </div>
+              </aside>
+            ) : null}
             <form className="chat-compose" onSubmit={(event) => void handleSendMessage(event)}>
               <div className="chat-compose-shell">
                 <button type="button" className="chat-compose-plus" aria-label="Add attachment">

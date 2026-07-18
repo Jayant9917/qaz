@@ -3,6 +3,7 @@ import { BackendHealthCard } from "./backend-health-card";
 const navItems = [
   { label: "Overview", href: "#overview" },
   { label: "Chat", href: "/chat" },
+  { label: "Memory", href: "/memory" },
   { label: "Identity", href: "#identity" },
   { label: "Sessions", href: "#sessions" },
   { label: "Permissions", href: "/permissions" },

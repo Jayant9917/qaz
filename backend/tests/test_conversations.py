@@ -1,4 +1,4 @@
-﻿"""Conversation API tests for the E2 fast path foundation."""
+"""Conversation API tests for the E2 fast path foundation."""
 
 from __future__ import annotations
 

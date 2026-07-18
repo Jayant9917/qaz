@@ -1,4 +1,4 @@
-﻿"""Response run models."""
+"""Response run models."""
 
 from __future__ import annotations
 
@@ -55,5 +55,3 @@ class ResponseRun(Base):
 
     conversation: Mapped[Any] = relationship("Conversation", lazy="joined")
     user_message: Mapped[Any] = relationship("Message", lazy="joined")
-
-

@@ -83,13 +83,17 @@ async def get_working_context(owner_id: UUID, session_id: UUID) -> WorkingContex
         return None
 
 
-async def save_working_context(context: WorkingContext, *, ttl_seconds: int | None = None) -> WorkingContext:
+async def save_working_context(
+    context: WorkingContext, *, ttl_seconds: int | None = None
+) -> WorkingContext:
     ttl = _ttl_seconds(ttl_seconds)
     context.updated_at = _now()
     if context.expires_at is None:
         context.expires_at = context.updated_at + timedelta(seconds=ttl)
     try:
-        await get_redis().set(_redis_key(context.owner_id, context.session_id), _encode_context(context), ex=ttl)
+        await get_redis().set(
+            _redis_key(context.owner_id, context.session_id), _encode_context(context), ex=ttl
+        )
     except RedisError:
         logger.warning(
             "working_context_unavailable action=save owner_id=%s session_id=%s",

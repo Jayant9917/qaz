@@ -367,7 +367,6 @@ async def generate_model_reply(
 ) -> GatewayReply:
     settings = get_settings()
 
-
     if model.provider != "openrouter" or not settings.openrouter_api_key:
         fallback = build_stub_reply(user_message, fallback_reason="missing_api_key")
         return GatewayReply(
@@ -400,7 +399,11 @@ async def generate_model_reply(
             if chunk.done:
                 final_chunk = chunk
 
-        if final_chunk is not None and final_chunk.safe_text.strip() and not final_chunk.used_fallback:
+        if (
+            final_chunk is not None
+            and final_chunk.safe_text.strip()
+            and not final_chunk.used_fallback
+        ):
             return GatewayReply(
                 safe_text=final_chunk.safe_text,
                 findings=final_chunk.findings or [],
@@ -440,6 +443,7 @@ async def generate_model_reply(
         fallback_detail_safe=last_detail,
         attempts=len(candidates),
     )
+
 
 async def _stream_openrouter_model(
     *,
@@ -485,55 +489,55 @@ async def _stream_openrouter_model(
                 json=request_payload,
             ) as response,
         ):
-                provider_request_id = response.headers.get("x-request-id")
-                if provider_request_id is not None:
-                    provider_request_id = str(provider_request_id)
-                if not response.is_success:
-                    body = (await response.aread()).decode("utf-8", errors="replace")
-                    failure_reason = _classify_http_failure(response.status_code, body)
-                    fallback = build_stub_reply(
-                        sanitized_user_message,
-                        fallback_reason=failure_reason,
-                    )
-                    for token in fallback.safe_text.split():
-                        yield GatewayStreamChunk(token=token)
-                    yield GatewayStreamChunk(
-                        done=True,
-                        safe_text=fallback.safe_text,
-                        findings=fallback.findings,
-                        provider_request_id=provider_request_id,
-                        provider_name="fallback",
-                        model_key=model.model_key,
-                        used_fallback=True,
-                        fallback_reason=failure_reason,
-                        fallback_detail_safe=f"OpenRouter returned HTTP {response.status_code}.",
-                    )
-                    return
+            provider_request_id = response.headers.get("x-request-id")
+            if provider_request_id is not None:
+                provider_request_id = str(provider_request_id)
+            if not response.is_success:
+                body = (await response.aread()).decode("utf-8", errors="replace")
+                failure_reason = _classify_http_failure(response.status_code, body)
+                fallback = build_stub_reply(
+                    sanitized_user_message,
+                    fallback_reason=failure_reason,
+                )
+                for token in fallback.safe_text.split():
+                    yield GatewayStreamChunk(token=token)
+                yield GatewayStreamChunk(
+                    done=True,
+                    safe_text=fallback.safe_text,
+                    findings=fallback.findings,
+                    provider_request_id=provider_request_id,
+                    provider_name="fallback",
+                    model_key=model.model_key,
+                    used_fallback=True,
+                    fallback_reason=failure_reason,
+                    fallback_detail_safe=f"OpenRouter returned HTTP {response.status_code}.",
+                )
+                return
 
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if not line or line.startswith(":"):
-                        continue
-                    if line.startswith("data:"):
-                        line = line.split(":", 1)[1].strip()
-                    if line == "[DONE]":
-                        break
-                    try:
-                        payload = json.loads(line)
-                    except ValueError:
-                        continue
-                    if not isinstance(payload, dict):
-                        continue
-                    choices = payload.get("choices") or []
-                    if not choices:
-                        continue
-                    first_choice = choices[0] or {}
-                    finish_reason = str(first_choice.get("finish_reason") or "") or finish_reason
-                    delta = first_choice.get("delta") or {}
-                    token = str(delta.get("content") or "")
-                    if token:
-                        running_text.append(token)
-                        yield GatewayStreamChunk(token=token)
+            async for line in response.aiter_lines():
+                line = line.strip()
+                if not line or line.startswith(":"):
+                    continue
+                if line.startswith("data:"):
+                    line = line.split(":", 1)[1].strip()
+                if line == "[DONE]":
+                    break
+                try:
+                    payload = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                choices = payload.get("choices") or []
+                if not choices:
+                    continue
+                first_choice = choices[0] or {}
+                finish_reason = str(first_choice.get("finish_reason") or "") or finish_reason
+                delta = first_choice.get("delta") or {}
+                token = str(delta.get("content") or "")
+                if token:
+                    running_text.append(token)
+                    yield GatewayStreamChunk(token=token)
     except httpx.TimeoutException:
         fallback_reason = "openrouter_timeout"
         fallback = build_stub_reply(sanitized_user_message, fallback_reason=fallback_reason)
@@ -682,10 +686,3 @@ async def stream_model_reply(
         timeout_seconds=settings.openrouter_timeout_seconds,
     ):
         yield chunk
-
-
-
-
-
-
-

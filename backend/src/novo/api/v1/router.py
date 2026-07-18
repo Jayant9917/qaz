@@ -9,9 +9,9 @@ from novo.api.v1.control import router as control_router
 from novo.api.v1.conversations import router as conversations_router
 from novo.api.v1.memory import router as memory_router
 from novo.api.v1.models import router as models_router
-from novo.api.v1.working_context import router as working_context_router
 from novo.api.v1.permissions import router as permissions_router
 from novo.api.v1.prompts import router as prompts_router
+from novo.api.v1.working_context import router as working_context_router
 
 router = APIRouter()
 router.include_router(health_router)
@@ -24,4 +24,3 @@ router.include_router(prompts_router)
 router.include_router(memory_router)
 router.include_router(working_context_router)
 router.include_router(conversations_router)
-

@@ -103,6 +103,37 @@ class Memory(Base):
     )
 
 
+class MemoryRevision(Base):
+    __tablename__ = "memory_revisions"
+    __table_args__: ClassVar[tuple[Any, ...]] = (
+        Index("ix_memory_revisions_owner_memory_created_at", "owner_id", "memory_id", "created_at"),
+        {"schema": "memory"},
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("identity.users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    memory_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("memory.memories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    canonical_content: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
 class MemoryAccessEvent(Base):
     __tablename__ = "memory_access_events"
     __table_args__: ClassVar[tuple[Any, ...]] = (

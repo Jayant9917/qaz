@@ -12,7 +12,11 @@ const login = await readFile(new URL("../src/app/login/page.tsx", import.meta.ur
 const sessionPanel = await readFile(new URL("../src/app/session-panel.tsx", import.meta.url), "utf8");
 const styles = await readFile(new URL("../src/app/globals.css", import.meta.url), "utf8");
 
-assert.match(page, /ControlCenterShell/);
+assert.match(page, /home-page/);
+assert.match(page, /framer-motion/);
+assert.match(page, /lucide-react/);
+assert.match(page, /Retry check/);
+assert.match(page, /06037dd15f67cd8a21a4d627c5854160.mp4/);
 assert.match(shell, /control-center-shell/);
 assert.match(shell, /control-grid/);
 assert.match(shell, /hero-panel/);

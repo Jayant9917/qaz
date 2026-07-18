@@ -36,9 +36,7 @@ def test_registry_endpoints_expose_seeded_models_and_prompts(client: TestClient)
     assert models.status_code == 200
     model_items = models.json()["items"]
     assert len(model_items) >= 3
-    openrouter_free = next(
-        item for item in model_items if item["model_key"] == "openrouter/free"
-    )
+    openrouter_free = next(item for item in model_items if item["model_key"] == "openrouter/free")
     assert openrouter_free["max_output_tokens"] == 256
 
     policies = client.get("/api/v1/model-policies", headers=headers)
@@ -81,7 +79,6 @@ def test_route_simulation_uses_registry_selection(client: TestClient) -> None:
     assert body["model_name"]
 
 
-
 def test_route_simulation_refreshes_after_model_updates(client: TestClient) -> None:
     tokens = bootstrap_owner(client)
     headers = auth_headers(tokens)
@@ -114,7 +111,11 @@ def test_route_simulation_refreshes_after_model_updates(client: TestClient) -> N
         second = client.post(
             "/api/v1/models/route-simulation",
             headers=headers,
-            json={"purpose": "conversation.reply", "classification": "private", "route_mode": "fast"},
+            json={
+                "purpose": "conversation.reply",
+                "classification": "private",
+                "route_mode": "fast",
+            },
         )
         assert second.status_code == 200
         second_body = second.json()
